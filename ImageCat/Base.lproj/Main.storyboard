@@ -795,7 +795,7 @@
                                                                         <binding destination="5uL-S0-O6O" name="value" keyPath="objectValue.icon" id="AxJ-1b-H8R"/>
                                                                     </connections>
                                                                 </imageView>
-                                                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="IgP-3w-V0a">
+                                                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="IgP-3w-V0a">
                                                                     <rect key="frame" x="23" y="0.0" width="96" height="16"/>
                                                                     <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Table View Cell" id="aKW-tz-G8k">
                                                                         <font key="font" usesAppearanceFont="YES"/>
