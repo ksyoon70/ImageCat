@@ -124,7 +124,7 @@ final class ImageCurveControl: NSView {
             return context.makeImage()
         }
 
-        guard let outputCGImage else { return nil }
+        guard let outputCGImage = outputCGImage else { return nil }
         return NSImage(cgImage: outputCGImage, size: image.size)
     }
 
@@ -148,7 +148,7 @@ final class ImageCurveControl: NSView {
         virtualPoint = curvePoint(fromViewPoint: location)
         selectedPointIndex = nearestPointIndex(to: virtualPoint!)
 
-        if let selectedPointIndex {
+        if let selectedPointIndex = selectedPointIndex {
             points[selectedPointIndex] = virtualPoint!.clampedToCurveRange
         } else {
             rebuildLUT(using: workingPoints())
@@ -164,7 +164,7 @@ final class ImageCurveControl: NSView {
         let location = convert(event.locationInWindow, from: nil)
         virtualPoint = curvePoint(fromViewPoint: location)
 
-        if let selectedPointIndex {
+        if let selectedPointIndex = selectedPointIndex {
             points[selectedPointIndex] = virtualPoint!.clampedToCurveRange
         } else {
             rebuildLUT(using: workingPoints())
@@ -183,15 +183,15 @@ final class ImageCurveControl: NSView {
 
         let curvePoint = location.map { self.curvePoint(fromViewPoint: $0) } ?? virtualPoint
 
-        if let curvePoint, curvePoint.isInsideCurveRange {
+        if let curvePoint = curvePoint, curvePoint.isInsideCurveRange {
             let clampedPoint = curvePoint.clampedToCurveRange
 
-            if let selectedPointIndex {
+            if let selectedPointIndex = selectedPointIndex {
                 points[selectedPointIndex] = clampedPoint
             } else {
                 upsertPoint(clampedPoint)
             }
-        } else if let selectedPointIndex, points.count > 2 {
+        } else if let selectedPointIndex = selectedPointIndex, points.count > 2 {
             points.remove(at: selectedPointIndex)
         }
 
@@ -275,7 +275,7 @@ final class ImageCurveControl: NSView {
     }
 
     private func workingPoints() -> [CGPoint] {
-        guard isEditing, selectedPointIndex == nil, let virtualPoint else {
+        guard isEditing, selectedPointIndex == nil, let virtualPoint = virtualPoint else {
             return points
         }
 

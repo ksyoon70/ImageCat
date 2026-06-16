@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="22505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22505"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -710,6 +710,7 @@
                         <splitViewItem id="8MV-YO-EiS"/>
                         <splitViewItem id="uve-CB-L7W"/>
                         <splitViewItem id="bFh-of-J5g"/>
+                        <splitViewItem id="lyj-iq-hay"/>
                     </splitViewItems>
                     <splitView key="splitView" dividerStyle="thin" vertical="YES" id="85Q-IF-4aO">
                         <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
@@ -723,11 +724,12 @@
                         <segue destination="y6b-4p-SIa" kind="relationship" relationship="splitItems" id="xbS-xm-cLz"/>
                         <segue destination="4q8-Ja-vZv" kind="relationship" relationship="splitItems" id="D0e-5q-Lb6"/>
                         <segue destination="2kw-Ks-93b" kind="relationship" relationship="splitItems" id="HV3-KF-uSB"/>
+                        <segue destination="wa9-bd-AeW" kind="relationship" relationship="splitItems" id="ITV-Dv-KQA"/>
                     </connections>
                 </splitViewController>
                 <customObject id="A0M-pE-U3u" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="74" y="715"/>
+            <point key="canvasLocation" x="75" y="680"/>
         </scene>
         <!--Image Preview View Controller-->
         <scene sceneID="9SP-Bq-B7o">
@@ -740,7 +742,29 @@
                 </viewController>
                 <customObject id="XhN-hE-vWa" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="615" y="1166"/>
+            <point key="canvasLocation" x="622" y="1166"/>
+        </scene>
+        <!--Image Control View Controller-->
+        <scene sceneID="WDP-qq-bfh">
+            <objects>
+                <viewController id="wa9-bd-AeW" customClass="ImageControlViewController" sceneMemberID="viewController">
+                    <view key="view" id="KMl-k1-0qi">
+                        <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                        <subviews>
+                            <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="uGw-vW-vGX">
+                                <rect key="frame" x="0.0" y="108" width="288" height="192"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                            </customView>
+                        </subviews>
+                    </view>
+                    <connections>
+                        <outlet property="curveControl" destination="uGw-vW-vGX" id="MKp-uc-BTr"/>
+                    </connections>
+                </viewController>
+                <customObject id="WvJ-oe-qNu" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="1104" y="1166"/>
         </scene>
         <!--Sidebar View Controller-->
         <scene sceneID="xbv-8r-TBk">

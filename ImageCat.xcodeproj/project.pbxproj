@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		61056C7C2FE18EBA00023A2B /* ImageControlViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61056C7B2FE18EBA00023A2B /* ImageControlViewController.swift */; };
+		61056C7E2FE1929100023A2B /* ImageCurveControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61056C7D2FE1929100023A2B /* ImageCurveControl.swift */; };
 		612260AF2F8E255F002BD7DD /* SidebarViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 612260AE2F8E255F002BD7DD /* SidebarViewController.swift */; };
 		612260B12F8E2811002BD7DD /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 612260B02F8E2811002BD7DD /* SidebarItem.swift */; };
 		612260B32F8E3000002BD7DD /* ImagePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 612260B22F8E3000002BD7DD /* ImagePreviewViewController.swift */; };
@@ -19,6 +21,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		61056C7B2FE18EBA00023A2B /* ImageControlViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageControlViewController.swift; sourceTree = "<group>"; };
+		61056C7D2FE1929100023A2B /* ImageCurveControl.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImageCurveControl.swift; sourceTree = "<group>"; };
 		612260AE2F8E255F002BD7DD /* SidebarViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarViewController.swift; sourceTree = "<group>"; };
 		612260B02F8E2811002BD7DD /* SidebarItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarItem.swift; sourceTree = "<group>"; };
 		612260B22F8E3000002BD7DD /* ImagePreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewViewController.swift; sourceTree = "<group>"; };
@@ -63,6 +67,8 @@
 		61639A442F75DF8600167974 /* ImageCat */ = {
 			isa = PBXGroup;
 			children = (
+				61056C7D2FE1929100023A2B /* ImageCurveControl.swift */,
+				61056C7B2FE18EBA00023A2B /* ImageControlViewController.swift */,
 				61639A452F75DF8600167974 /* AppDelegate.swift */,
 				61639A472F75DF8600167974 /* ViewController.swift */,
 				61639A492F75DF8600167974 /* Document.swift */,
@@ -152,7 +158,9 @@
 				61639A4D2F75DF8600167974 /* Document.xcdatamodeld in Sources */,
 				61639A482F75DF8600167974 /* ViewController.swift in Sources */,
 				612260B12F8E2811002BD7DD /* SidebarItem.swift in Sources */,
+				61056C7C2FE18EBA00023A2B /* ImageControlViewController.swift in Sources */,
 				612260B32F8E3000002BD7DD /* ImagePreviewViewController.swift in Sources */,
+				61056C7E2FE1929100023A2B /* ImageCurveControl.swift in Sources */,
 				61639A462F75DF8600167974 /* AppDelegate.swift in Sources */,
 				61639A4A2F75DF8600167974 /* Document.swift in Sources */,
 			);
