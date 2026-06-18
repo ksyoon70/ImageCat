@@ -74,4 +74,11 @@ class ImagePreviewViewController: NSViewController {
         return (parent as? NSSplitViewController)?.splitViewItems
             .first { $0.viewController === self }
     }
+    
+    func applyCurve(using curveControl: ImageCurveControl) {
+        guard let imageURL = self.imageURL,
+              let originalImage = NSImage(contentsOf: imageURL) else { return }
+
+        imageView.image = curveControl.apply(to: originalImage)
+    }
 }
