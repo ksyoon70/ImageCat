@@ -21,9 +21,9 @@ class ImageControlViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do view setup here.
-        curveControl.onCurveChanged = { [weak self] curveControl in
-                    self?.imagePreviewViewController?.applyCurve(using: curveControl)
-                }
+        curveControl.onCurveEditingEnded = { [weak self] curveControl in
+            self?.imagePreviewViewController?.applyCurve(using: curveControl)
+        }
     }
     // 버튼을 누를 때 실행될 함수
     @IBAction func resetButtonClicked(_ sender: NSButton) {
