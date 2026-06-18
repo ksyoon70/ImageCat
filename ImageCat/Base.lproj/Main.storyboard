@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="22505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22505"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -752,14 +752,26 @@
                         <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
-                            <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="uGw-vW-vGX">
+                            <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="uGw-vW-vGX" customClass="ImageCurveControl" customModule="ImageCat" customModuleProvider="target">
                                 <rect key="frame" x="0.0" y="108" width="288" height="192"/>
                                 <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
                             </customView>
+                            <button verticalHuggingPriority="750" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="mA8-yb-Q8K">
+                                <rect key="frame" x="-1" y="49" width="111" height="32"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                <buttonCell key="cell" type="push" title="Curve초기화" bezelStyle="rounded" image="gearshape.fill" catalog="system" imagePosition="leading" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="l4p-QK-HUF">
+                                    <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                                    <font key="font" metaFont="system"/>
+                                </buttonCell>
+                                <connections>
+                                    <action selector="resetButtonClicked:" target="wa9-bd-AeW" id="xhH-Eu-2PM"/>
+                                </connections>
+                            </button>
                         </subviews>
                     </view>
                     <connections>
                         <outlet property="curveControl" destination="uGw-vW-vGX" id="MKp-uc-BTr"/>
+                        <outlet property="resetButton" destination="mA8-yb-Q8K" id="UuT-7I-WNJ"/>
                     </connections>
                 </viewController>
                 <customObject id="WvJ-oe-qNu" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
@@ -819,7 +831,7 @@
                                                                         <binding destination="5uL-S0-O6O" name="value" keyPath="objectValue.icon" id="AxJ-1b-H8R"/>
                                                                     </connections>
                                                                 </imageView>
-                                                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="IgP-3w-V0a">
+                                                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="IgP-3w-V0a">
                                                                     <rect key="frame" x="23" y="0.0" width="96" height="16"/>
                                                                     <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Table View Cell" id="aKW-tz-G8k">
                                                                         <font key="font" usesAppearanceFont="YES"/>
@@ -891,4 +903,7 @@
             <point key="canvasLocation" x="229" y="1166"/>
         </scene>
     </scenes>
+    <resources>
+        <image name="gearshape.fill" catalog="system" width="16" height="16"/>
+    </resources>
 </document>
