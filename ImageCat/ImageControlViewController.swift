@@ -20,7 +20,11 @@ class ImageControlViewController: NSViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Do view setup here.
+        // 드래그 중에는 낮은 해상도의 빠른 프리뷰로 커브 변경을 즉시 보여준다.
+        curveControl.onCurveChanged = { [weak self] curveControl in
+            self?.imagePreviewViewController?.applyCurve(using: curveControl, isInteractive: true)
+        }
+        // 마우스를 놓으면 더 높은 해상도의 최종 프리뷰를 다시 렌더링한다.
         curveControl.onCurveEditingEnded = { [weak self] curveControl in
             self?.imagePreviewViewController?.applyCurve(using: curveControl)
         }

@@ -58,8 +58,7 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     override func viewDidAppear() {
         super.viewDidAppear()
 
-        ownSplitViewItem?.minimumThickness = 220
-        ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
+        configureResizableSplitViewItem()
     }
 
     override var representedObject: Any? {
@@ -331,6 +330,14 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     private var ownSplitViewItem: NSSplitViewItem? {
         return (parent as? NSSplitViewController)?.splitViewItems
             .first { $0.viewController === self }
+    }
+
+    // 파일 리스트 영역의 폭을 마우스로 조절할 수 있도록 Split View 제한값을 명시한다.
+    private func configureResizableSplitViewItem() {
+        ownSplitViewItem?.canCollapse = false
+        ownSplitViewItem?.minimumThickness = 180
+        ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
+        ownSplitViewItem?.holdingPriority = .defaultLow
     }
 
     private static func isImageURL(_ url: URL) -> Bool {

@@ -59,6 +59,8 @@ final class ImageCurveControl: NSView {
             CGPoint(x: 255, y: 255)
         ]
         onCurveChanged?(self)
+        // 리셋 버튼도 편집 종료와 같은 경로로 미리보기를 원본 상태로 되돌린다.
+        onCurveEditingEnded?(self)
     }
 
     func apply(to image: NSImage, brightness: CGFloat = 0) -> NSImage? {
