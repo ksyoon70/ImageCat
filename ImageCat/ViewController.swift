@@ -58,7 +58,8 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     override func viewDidAppear() {
         super.viewDidAppear()
 
-        configureResizableSplitViewItem()
+        ownSplitViewItem?.minimumThickness = 220
+        ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
     }
 
     override var representedObject: Any? {

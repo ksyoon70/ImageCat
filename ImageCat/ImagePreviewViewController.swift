@@ -53,8 +53,10 @@ class ImagePreviewViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        
+        ownSplitViewItem?.minimumThickness = 220
+        ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
 
-        configureResizableSplitViewItems()
     }
 
     private func configureView() {
