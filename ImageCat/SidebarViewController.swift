@@ -10,6 +10,8 @@ import Cocoa
 class SidebarViewController: NSViewController {
     @IBOutlet weak var outlineView: NSOutlineView!
     @IBOutlet weak var treeController: NSTreeController!
+    // Sidebar 폭을 항목 중 가장 긴 표시 이름에 맞추기 위해 원본 트리를 보관한다.
+    private var sidebarItems: [SidebarItem] = []
 
     private struct SystemFolder {
         let directory: FileManager.SearchPathDirectory
@@ -63,12 +65,21 @@ class SidebarViewController: NSViewController {
             )
         ])
             
-        treeController.addObject(homeGroup)
-        treeController.addObject(favoriteGroup)
+        sidebarItems = [homeGroup, favoriteGroup]
+        sidebarItems.forEach { treeController.addObject($0) }
             
         DispatchQueue.main.async {
             self.outlineView.expandItem(nil, expandChildren: true)
+            // outlineView가 펼쳐진 뒤 indentation 값을 반영해 고정 폭을 계산한다.
+            self.configureFixedSidebarWidth()
         }
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+
+        // Split View item은 parent 연결 이후에 안정적으로 찾을 수 있어 표시 시점에도 한 번 더 적용한다.
+        configureFixedSidebarWidth()
     }
 
     @objc private func outlineViewSelectionDidChange(_ notification: Notification) {
@@ -88,6 +99,48 @@ class SidebarViewController: NSViewController {
         return (parent as? NSSplitViewController)?.splitViewItems
             .compactMap { $0.viewController as? ViewController }
             .first
+    }
+
+    private var ownSplitViewItem: NSSplitViewItem? {
+        return (parent as? NSSplitViewController)?.splitViewItems
+            .first { $0.viewController === self }
+    }
+
+    private func configureFixedSidebarWidth() {
+        let width = sidebarWidthForLargestItem()
+        guard width > 0 else { return }
+
+        ownSplitViewItem?.canCollapse = false
+        // 최소/최대 폭을 같게 두어 sidebar를 항목 최대 폭으로 고정한다.
+        ownSplitViewItem?.minimumThickness = width
+        ownSplitViewItem?.maximumThickness = width
+
+        if let splitViewController = parent as? NSSplitViewController,
+           splitViewController.splitViewItems.first?.viewController === self {
+            // 실제 divider 위치도 같은 값으로 맞춰 초기 표시 폭과 제한 폭이 어긋나지 않게 한다.
+            splitViewController.splitView.setPosition(width, ofDividerAt: 0)
+        }
+    }
+
+    private func sidebarWidthForLargestItem() -> CGFloat {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        ]
+        // 아이콘, disclosure 영역, cell padding까지 포함해 텍스트가 잘리지 않을 여유 폭을 더한다.
+        let rowChromeWidth: CGFloat = 64
+
+        func width(for item: SidebarItem, level: Int) -> CGFloat {
+            let textWidth = ceil((item.name as NSString).size(withAttributes: attributes).width)
+            let itemWidth = textWidth + CGFloat(level) * outlineView.indentationPerLevel + rowChromeWidth
+            let childWidth = item.children
+                .map { width(for: $0, level: level + 1) }
+                .max() ?? 0
+            return max(itemWidth, childWidth)
+        }
+
+        return sidebarItems
+            .map { width(for: $0, level: 0) }
+            .max() ?? 0
     }
 
     private func resolvedUserFolderURL(for folder: SystemFolder, homeURL: URL) -> URL? {

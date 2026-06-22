@@ -29,6 +29,31 @@ class ImageControlViewController: NSViewController {
             self?.imagePreviewViewController?.applyCurve(using: curveControl)
         }
     }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+
+        // Split View item과 curveControl frame이 모두 준비된 뒤 control pane 폭을 고정한다.
+        configureFixedSplitViewItemWidth()
+    }
+
+    private var ownSplitViewItem: NSSplitViewItem? {
+        return (parent as? NSSplitViewController)?.splitViewItems
+            .first { $0.viewController === self }
+    }
+
+    private func configureFixedSplitViewItemWidth() {
+        view.layoutSubtreeIfNeeded()
+
+        let width = ceil(curveControl.frame.width)
+        guard width > 0 else { return }
+
+        ownSplitViewItem?.canCollapse = false
+        // ImageCurveControl의 설계 폭을 pane 폭으로 삼기 위해 최소/최대 폭을 같은 값으로 묶는다.
+        ownSplitViewItem?.minimumThickness = width
+        ownSplitViewItem?.maximumThickness = width
+    }
+
     // 버튼을 누를 때 실행될 함수
     @IBAction func resetButtonClicked(_ sender: NSButton) {
         print("Curve 초기화 버튼이 클릭되었습니다.")

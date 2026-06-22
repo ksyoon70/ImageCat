@@ -58,8 +58,7 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     override func viewDidAppear() {
         super.viewDidAppear()
 
-        ownSplitViewItem?.minimumThickness = 220
-        ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
+        configureResizableSplitViewItem()
     }
 
     override var representedObject: Any? {
@@ -186,6 +185,9 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
 
         pathLabel.lineBreakMode = .byTruncatingMiddle
         pathLabel.textColor = .secondaryLabelColor
+        // 긴 경로의 intrinsic width가 파일 리스트 Split View 폭을 밀어내지 않도록 한다.
+        pathLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        pathLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         pathLabel.translatesAutoresizingMaskIntoConstraints = false
 
         toolbarView.addSubview(upButton)
@@ -333,10 +335,11 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
             .first { $0.viewController === self }
     }
 
-    // 파일 리스트 영역의 폭을 마우스로 조절할 수 있도록 Split View 제한값을 명시한다.
+    // 파일 리스트는 긴 경로/컬럼 폭보다 사용자가 조절한 Split View 폭을 우선한다.
     private func configureResizableSplitViewItem() {
         ownSplitViewItem?.canCollapse = false
-        ownSplitViewItem?.minimumThickness = 180
+        // 너무 좁아지는 것만 막고, preview 영역과 공간을 주고받을 수 있게 최소폭을 낮게 둔다.
+        ownSplitViewItem?.minimumThickness = 100
         ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
         ownSplitViewItem?.holdingPriority = .defaultLow
     }
