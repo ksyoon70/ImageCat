@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild -project ImageCat.xcodeproj -scheme ImageCat -configuration Debug build CODE_SIGNING_ALLOWED=NO)",
+      "Bash(xcode-select -p)",
+      "Bash(DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project /Users/headway/workspace/ImageCat/ImageCat.xcodeproj -scheme ImageCat -configuration Debug build CODE_SIGNING_ALLOWED=NO)"
+    ]
+  }
+}
