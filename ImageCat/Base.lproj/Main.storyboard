@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="19529" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+<document type="com.apple.InterfaceBuilder3.Cocoa.Storyboard.XIB" version="3.0" toolsVersion="22505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
     <dependencies>
         <deployment identifier="macosx"/>
-        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="19529"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22505"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -749,7 +749,7 @@
             <objects>
                 <viewController id="wa9-bd-AeW" customClass="ImageControlViewController" customModule="ImageCat" sceneMemberID="viewController">
                     <view key="view" id="KMl-k1-0qi">
-                        <rect key="frame" x="0.0" y="0.0" width="450" height="300"/>
+                        <rect key="frame" x="0.0" y="0.0" width="288" height="300"/>
                         <autoresizingMask key="autoresizingMask"/>
                         <subviews>
                             <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="uGw-vW-vGX" customClass="ImageCurveControl" customModule="ImageCat" customModuleProvider="target">
@@ -776,7 +776,7 @@
                 </viewController>
                 <customObject id="WvJ-oe-qNu" userLabel="First Responder" customClass="NSResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="1104" y="1166"/>
+            <point key="canvasLocation" x="1023" y="1166"/>
         </scene>
         <!--Sidebar View Controller-->
         <scene sceneID="xbv-8r-TBk">
@@ -831,7 +831,7 @@
                                                                         <binding destination="5uL-S0-O6O" name="value" keyPath="objectValue.icon" id="AxJ-1b-H8R"/>
                                                                     </connections>
                                                                 </imageView>
-                                                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="IgP-3w-V0a">
+                                                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="IgP-3w-V0a">
                                                                     <rect key="frame" x="23" y="0.0" width="96" height="16"/>
                                                                     <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Table View Cell" id="aKW-tz-G8k">
                                                                         <font key="font" usesAppearanceFont="YES"/>
