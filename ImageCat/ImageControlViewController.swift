@@ -9,8 +9,11 @@ import Cocoa
 
 class ImageControlViewController: NSViewController {
 
+    @IBOutlet weak var controlSplitView: NSSplitView!
     @IBOutlet weak var curveControl: ImageCurveControl!
     @IBOutlet weak var resetButton: NSButton!
+
+    private var didSetInitialControlSplitPositions = false
     
     private var imagePreviewViewController: ImagePreviewViewController? {
         return (parent as? NSSplitViewController)?.splitViewItems
@@ -20,6 +23,10 @@ class ImageControlViewController: NSViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+
+        controlSplitView.isVertical = false
+        controlSplitView.arrangesAllSubviews = true
+
         // 드래그 중에는 낮은 해상도의 빠른 프리뷰로 커브 변경을 즉시 보여준다.
         curveControl.onCurveChanged = { [weak self] curveControl in
             self?.imagePreviewViewController?.applyCurve(using: curveControl, isInteractive: true)
@@ -28,6 +35,11 @@ class ImageControlViewController: NSViewController {
         curveControl.onCurveEditingEnded = { [weak self] curveControl in
             self?.imagePreviewViewController?.applyCurve(using: curveControl)
         }
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        setInitialControlSplitViewHeightsIfNeeded()
     }
 
     override func viewDidAppear() {
@@ -52,6 +64,20 @@ class ImageControlViewController: NSViewController {
         // ImageCurveControl의 설계 폭을 pane 폭으로 삼기 위해 최소/최대 폭을 같은 값으로 묶는다.
         ownSplitViewItem?.minimumThickness = width
         ownSplitViewItem?.maximumThickness = width
+    }
+
+    private func setInitialControlSplitViewHeightsIfNeeded() {
+        guard !didSetInitialControlSplitPositions,
+              controlSplitView.subviews.count == 3,
+              controlSplitView.bounds.height > 0 else {
+            return
+        }
+
+        didSetInitialControlSplitPositions = true
+
+        let thirdHeight = controlSplitView.bounds.height / 3
+        controlSplitView.setPosition(thirdHeight, ofDividerAt: 0)
+        controlSplitView.setPosition(thirdHeight * 2, ofDividerAt: 1)
     }
 
     // 버튼을 누를 때 실행될 함수
