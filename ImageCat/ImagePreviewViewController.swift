@@ -28,6 +28,7 @@ class ImagePreviewViewController: NSViewController {
     }
 
     private let imageView = NSImageView()
+    private let annotationOverlayView = AnnotationOverlayView()
     private let emptyLabel = NSTextField(labelWithString: "이미지를 선택하세요.")
     // Core Image 렌더러를 재사용해서 GPU 렌더링 컨텍스트 생성 비용을 줄인다.
     private static let ciContext = CIContext(options: [
@@ -44,6 +45,12 @@ class ImagePreviewViewController: NSViewController {
     private var pendingRenderRequest: RenderRequest?
     // 동시에 여러 렌더 작업이 큐에 쌓이지 않도록 실행 상태를 추적한다.
     private var isRenderScheduled = false
+    
+    private var imageControlViewController: ImageControlViewController? {
+        return (parent as? NSSplitViewController)?.splitViewItems
+            .compactMap { $0.viewController as? ImageControlViewController }
+            .first
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -71,11 +78,14 @@ class ImagePreviewViewController: NSViewController {
         imageView.setContentHuggingPriority(.defaultLow, for: .vertical)
         imageView.translatesAutoresizingMaskIntoConstraints = false
 
+        annotationOverlayView.translatesAutoresizingMaskIntoConstraints = false
+
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.alignment = .center
         emptyLabel.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(imageView)
+        view.addSubview(annotationOverlayView)
         view.addSubview(emptyLabel)
 
         NSLayoutConstraint.activate([
@@ -84,6 +94,11 @@ class ImagePreviewViewController: NSViewController {
             imageView.topAnchor.constraint(equalTo: view.topAnchor, constant: 12),
             imageView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12),
 
+            annotationOverlayView.leadingAnchor.constraint(equalTo: imageView.leadingAnchor),
+            annotationOverlayView.trailingAnchor.constraint(equalTo: imageView.trailingAnchor),
+            annotationOverlayView.topAnchor.constraint(equalTo: imageView.topAnchor),
+            annotationOverlayView.bottomAnchor.constraint(equalTo: imageView.bottomAnchor),
+
             emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
@@ -91,22 +106,45 @@ class ImagePreviewViewController: NSViewController {
 
     private func updateImage() {
         guard isViewLoaded else { return }
+
         guard let imageURL = imageURL, let image = NSImage(contentsOf: imageURL) else {
-            // 이미지가 없어질 때 진행 중이거나 대기 중인 렌더 결과를 모두 무효화한다.
             renderGeneration += 1
             originalImage = nil
             pendingRenderRequest = nil
             imageView.image = nil
+            annotationOverlayView.annotation = nil
+            annotationOverlayView.visibleShapeIndexes = []
+            imageControlViewController?.updatePolygonLabels(from: nil)
             emptyLabel.isHidden = false
             return
         }
 
-        // 새 이미지를 선택하면 이전 이미지 기준의 렌더링 결과가 화면에 반영되지 않게 한다.
         renderGeneration += 1
         originalImage = image
         pendingRenderRequest = nil
         imageView.image = image
+
+        let annotation = Self.loadAnnotation(
+            for: imageURL,
+            fallbackImageSize: image.pixelSizeForPreviewRendering()
+        )
+
+        annotationOverlayView.annotation = annotation
+        imageControlViewController?.updatePolygonLabels(from: annotation)
+
         emptyLabel.isHidden = true
+    }
+
+    func setVisibleAnnotationShapeIndexes(_ indexes: Set<Int>) {
+        annotationOverlayView.visibleShapeIndexes = indexes
+    }
+
+    var isPolygonEditingEnabled: Bool {
+        return annotationOverlayView.isEditingEnabled
+    }
+
+    func setPolygonEditingEnabled(_ isEnabled: Bool) {
+        annotationOverlayView.isEditingEnabled = isEnabled
     }
 
     private var ownSplitViewItem: NSSplitViewItem? {
@@ -271,6 +309,24 @@ class ImagePreviewViewController: NSViewController {
         }
         return true
     }
+
+    private static func loadAnnotation(for imageURL: URL, fallbackImageSize: NSSize?) -> LabelMeAnnotation? {
+        let jsonURL = imageURL.deletingPathExtension().appendingPathExtension("json")
+        guard FileManager.default.fileExists(atPath: jsonURL.path) else { return nil }
+
+        do {
+            let data = try Data(contentsOf: jsonURL)
+            var annotation = try JSONDecoder().decode(LabelMeAnnotation.self, from: data)
+            if annotation.imageSize == .zero, let fallbackImageSize = fallbackImageSize {
+                annotation.imageWidth = fallbackImageSize.width
+                annotation.imageHeight = fallbackImageSize.height
+            }
+            return annotation
+        } catch {
+            print("Annotation JSON 읽기 실패: \(jsonURL.path) - \(error.localizedDescription)")
+            return nil
+        }
+    }
 }
 
 private extension NSImage {
@@ -278,5 +334,324 @@ private extension NSImage {
     func cgImageForPreviewRendering() -> CGImage? {
         var proposedRect = CGRect(origin: .zero, size: size)
         return cgImage(forProposedRect: &proposedRect, context: nil, hints: nil)
+    }
+
+    func pixelSizeForPreviewRendering() -> NSSize? {
+        guard let cgImage = cgImageForPreviewRendering() else { return nil }
+        return NSSize(width: cgImage.width, height: cgImage.height)
+    }
+}
+
+private final class AnnotationOverlayView: NSView {
+    var annotation: LabelMeAnnotation? = nil {
+        didSet {
+            labelColors = LabelColorProvider.colors(for: annotation?.shapes.map { $0.label } ?? [])
+            if oldValue?.shapes.count != annotation?.shapes.count {
+                visibleShapeIndexes = Set(annotation?.shapes.indices ?? 0..<0)
+            }
+            needsDisplay = true
+        }
+    }
+
+    var visibleShapeIndexes: Set<Int> = [] {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    private var labelColors: [String: NSColor] = [:]
+    private var trackingArea: NSTrackingArea?
+    private var hoveredShapeIndex: Int?
+    private var draggingShapeIndex: Int?
+    private var lastDragImagePoint: CGPoint?
+
+    var isEditingEnabled = false {
+        didSet {
+            hoveredShapeIndex = nil
+            draggingShapeIndex = nil
+            lastDragImagePoint = nil
+            needsDisplay = true
+            window?.invalidateCursorRects(for: self)
+            if !isEditingEnabled {
+                NSCursor.arrow.set()
+            }
+        }
+    }
+
+    override var isFlipped: Bool {
+        return true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return isEditingEnabled ? self : nil
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsDisplay = true
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea = trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let options: NSTrackingArea.Options = [
+            .mouseMoved,
+            .mouseEnteredAndExited,
+            .activeInKeyWindow,
+            .inVisibleRect
+        ]
+        let trackingArea = NSTrackingArea(rect: .zero, options: options, owner: self)
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard isEditingEnabled else { return }
+
+        let location = convert(event.locationInWindow, from: nil)
+        updateHoveredShape(at: location)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hoveredShapeIndex = nil
+        NSCursor.arrow.set()
+        needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isEditingEnabled else { return }
+
+        let location = convert(event.locationInWindow, from: nil)
+        draggingShapeIndex = shapeIndex(at: location)
+        hoveredShapeIndex = draggingShapeIndex
+        lastDragImagePoint = imagePoint(for: location)
+
+        if draggingShapeIndex != nil {
+            NSCursor.closedHand.set()
+        }
+
+        needsDisplay = true
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard isEditingEnabled,
+              let draggingShapeIndex = draggingShapeIndex,
+              var annotation = annotation,
+              annotation.shapes.indices.contains(draggingShapeIndex),
+              let previousImagePoint = lastDragImagePoint else {
+            return
+        }
+
+        let location = convert(event.locationInWindow, from: nil)
+        guard let currentImagePoint = imagePoint(for: location) else { return }
+
+        let delta = CGPoint(
+            x: currentImagePoint.x - previousImagePoint.x,
+            y: currentImagePoint.y - previousImagePoint.y
+        )
+
+        for pointIndex in annotation.shapes[draggingShapeIndex].points.indices {
+            annotation.shapes[draggingShapeIndex].points[pointIndex].x += delta.x
+            annotation.shapes[draggingShapeIndex].points[pointIndex].y += delta.y
+        }
+
+        self.annotation = annotation
+        lastDragImagePoint = currentImagePoint
+        hoveredShapeIndex = draggingShapeIndex
+        NSCursor.closedHand.set()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        draggingShapeIndex = nil
+        lastDragImagePoint = nil
+
+        let location = convert(event.locationInWindow, from: nil)
+        updateHoveredShape(at: location)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard let annotation = annotation,
+              annotation.imageSize.width > 0,
+              annotation.imageSize.height > 0 else {
+            return
+        }
+
+        let imageRect = fittedImageRect(for: annotation.imageSize)
+        guard imageRect.width > 0, imageRect.height > 0 else { return }
+
+        NSGraphicsContext.current?.cgContext.setLineJoin(.round)
+        NSGraphicsContext.current?.cgContext.setLineCap(.round)
+
+        for (shapeIndex, shape) in annotation.shapes.enumerated() {
+            guard visibleShapeIndexes.contains(shapeIndex) else { continue }
+
+            let viewPoints = shape.points.map { point in
+                CGPoint(
+                    x: imageRect.minX + point.x * imageRect.width / annotation.imageSize.width,
+                    y: imageRect.minY + point.y * imageRect.height / annotation.imageSize.height
+                )
+            }
+            guard viewPoints.count >= 2 else { continue }
+
+            let color = labelColors[shape.label] ?? .systemBlue
+            let path = makePath(for: shape, points: viewPoints)
+
+            if isEditingEnabled && (shapeIndex == hoveredShapeIndex || shapeIndex == draggingShapeIndex) {
+                color.withAlphaComponent(0.28).setFill()
+                path.fill()
+            }
+
+            color.setStroke()
+            path.lineWidth = 2
+            path.stroke()
+            drawVertexHandles(at: viewPoints, color: color)
+        }
+    }
+
+    private func fittedImageRect(for imageSize: NSSize) -> CGRect {
+        let scale = min(bounds.width / imageSize.width, bounds.height / imageSize.height)
+        let fittedSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+
+        return CGRect(
+            x: bounds.midX - fittedSize.width / 2,
+            y: bounds.midY - fittedSize.height / 2,
+            width: fittedSize.width,
+            height: fittedSize.height
+        )
+    }
+
+    private func makePath(for shape: LabelMeAnnotation.Shape, points: [CGPoint]) -> NSBezierPath {
+        let path = NSBezierPath()
+        path.lineWidth = 2
+
+        if shape.shapeType == "rectangle", points.count >= 2 {
+            let firstPoint = points[0]
+            let secondPoint = points[1]
+            let rect = CGRect(
+                x: min(firstPoint.x, secondPoint.x),
+                y: min(firstPoint.y, secondPoint.y),
+                width: abs(secondPoint.x - firstPoint.x),
+                height: abs(secondPoint.y - firstPoint.y)
+            )
+            path.appendRect(rect)
+        } else {
+            path.move(to: points[0])
+            for point in points.dropFirst() {
+                path.line(to: point)
+            }
+            path.close()
+        }
+
+        return path
+    }
+
+    private func drawVertexHandles(at points: [CGPoint], color: NSColor) {
+        color.setFill()
+
+        for point in points {
+            let handleRect = CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)
+            NSBezierPath(ovalIn: handleRect).fill()
+        }
+    }
+
+    private func updateHoveredShape(at location: CGPoint) {
+        let newHoveredShapeIndex = shapeIndex(at: location)
+        if newHoveredShapeIndex != hoveredShapeIndex {
+            hoveredShapeIndex = newHoveredShapeIndex
+            needsDisplay = true
+        }
+
+        if newHoveredShapeIndex == nil {
+            NSCursor.arrow.set()
+        } else {
+            NSCursor.openHand.set()
+        }
+    }
+
+    private func shapeIndex(at location: CGPoint) -> Int? {
+        guard isEditingEnabled,
+              let annotation = annotation,
+              annotation.imageSize.width > 0,
+              annotation.imageSize.height > 0,
+              let imagePoint = imagePoint(for: location) else {
+            return nil
+        }
+
+        for shapeIndex in annotation.shapes.indices.reversed() {
+            guard visibleShapeIndexes.contains(shapeIndex) else { continue }
+
+            if contains(imagePoint, in: annotation.shapes[shapeIndex]) {
+                return shapeIndex
+            }
+        }
+
+        return nil
+    }
+
+    private func imagePoint(for viewPoint: CGPoint) -> CGPoint? {
+        guard let annotation = annotation,
+              annotation.imageSize.width > 0,
+              annotation.imageSize.height > 0 else {
+            return nil
+        }
+
+        let imageRect = fittedImageRect(for: annotation.imageSize)
+        guard imageRect.contains(viewPoint), imageRect.width > 0, imageRect.height > 0 else {
+            return nil
+        }
+
+        return CGPoint(
+            x: (viewPoint.x - imageRect.minX) * annotation.imageSize.width / imageRect.width,
+            y: (viewPoint.y - imageRect.minY) * annotation.imageSize.height / imageRect.height
+        )
+    }
+
+    private func contains(_ point: CGPoint, in shape: LabelMeAnnotation.Shape) -> Bool {
+        if shape.shapeType == "rectangle", shape.points.count >= 2 {
+            let firstPoint = shape.points[0]
+            let secondPoint = shape.points[1]
+            let rect = CGRect(
+                x: min(firstPoint.x, secondPoint.x),
+                y: min(firstPoint.y, secondPoint.y),
+                width: abs(secondPoint.x - firstPoint.x),
+                height: abs(secondPoint.y - firstPoint.y)
+            )
+            return rect.contains(point)
+        }
+
+        return polygonContains(point, points: shape.points.map { CGPoint(x: $0.x, y: $0.y) })
+    }
+
+    private func polygonContains(_ point: CGPoint, points: [CGPoint]) -> Bool {
+        guard points.count >= 3 else { return false }
+
+        var isInside = false
+        var previousIndex = points.count - 1
+
+        for index in points.indices {
+            let currentPoint = points[index]
+            let previousPoint = points[previousIndex]
+
+            let crossesY = (currentPoint.y > point.y) != (previousPoint.y > point.y)
+            if crossesY {
+                let xIntersection = (previousPoint.x - currentPoint.x) *
+                    (point.y - currentPoint.y) /
+                    (previousPoint.y - currentPoint.y) +
+                    currentPoint.x
+                if point.x < xIntersection {
+                    isInside.toggle()
+                }
+            }
+
+            previousIndex = index
+        }
+
+        return isInside
     }
 }
