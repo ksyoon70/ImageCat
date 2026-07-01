@@ -755,10 +755,10 @@
             </objects>
             <point key="canvasLocation" x="75" y="250"/>
         </scene>
-        <!--Split View Controller-->
+        <!--Main Split View Controller-->
         <scene sceneID="m8f-nC-EGx">
             <objects>
-                <splitViewController id="T8K-Hq-BLd" sceneMemberID="viewController">
+                <splitViewController id="T8K-Hq-BLd" customClass="MainSplitViewController" customModule="ImageCat" customModuleProvider="target" sceneMemberID="viewController">
                     <splitViewItems>
                         <splitViewItem id="8MV-YO-EiS"/>
                         <splitViewItem id="uve-CB-L7W"/>
@@ -815,7 +815,7 @@
                                             <visualEffectView blendingMode="behindWindow" material="appearanceBased" state="followsWindowActiveState" translatesAutoresizingMaskIntoConstraints="NO" id="IKf-Tg-3aT">
                                                 <rect key="frame" x="0.0" y="163" width="288" height="22"/>
                                                 <subviews>
-                                                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="Ph5-ep-Meg">
+                                                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Ph5-ep-Meg">
                                                         <rect key="frame" x="3" y="3" width="63" height="16"/>
                                                         <textFieldCell key="cell" lineBreakMode="clipping" alignment="left" title="Label List" id="l9Z-8H-Xd3">
                                                             <font key="font" usesAppearanceFont="YES"/>
@@ -827,6 +827,7 @@
                                                 <constraints>
                                                     <constraint firstAttribute="height" constant="22" id="AgM-fd-yhp"/>
                                                     <constraint firstItem="Ph5-ep-Meg" firstAttribute="centerY" secondItem="IKf-Tg-3aT" secondAttribute="centerY" id="F4N-tx-Vc5"/>
+                                                    <constraint firstItem="Ph5-ep-Meg" firstAttribute="leading" secondItem="IKf-Tg-3aT" secondAttribute="leading" constant="5" id="uq4-La-81n"/>
                                                 </constraints>
                                             </visualEffectView>
                                             <scrollView autohidesScrollers="YES" horizontalLineScroll="24" horizontalPageScroll="10" verticalLineScroll="24" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="u6R-pV-ZBa">
@@ -929,7 +930,7 @@
                                             <visualEffectView blendingMode="behindWindow" material="appearanceBased" state="followsWindowActiveState" translatesAutoresizingMaskIntoConstraints="NO" id="q6g-yu-QNQ">
                                                 <rect key="frame" x="0.0" y="163" width="288" height="22"/>
                                                 <subviews>
-                                                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" ambiguous="YES" translatesAutoresizingMaskIntoConstraints="NO" id="kGm-iQ-HrB">
+                                                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="kGm-iQ-HrB">
                                                         <rect key="frame" x="3" y="3" width="96" height="16"/>
                                                         <textFieldCell key="cell" lineBreakMode="clipping" title="Polygon Labels" id="HaB-Oo-gZU">
                                                             <font key="font" usesAppearanceFont="YES"/>
@@ -940,6 +941,7 @@
                                                 </subviews>
                                                 <constraints>
                                                     <constraint firstItem="kGm-iQ-HrB" firstAttribute="centerY" secondItem="q6g-yu-QNQ" secondAttribute="centerY" id="AvG-FB-b3G"/>
+                                                    <constraint firstItem="kGm-iQ-HrB" firstAttribute="leading" secondItem="q6g-yu-QNQ" secondAttribute="leading" constant="5" id="Lal-0l-6TP"/>
                                                     <constraint firstAttribute="height" constant="22" id="QjB-uU-bnk"/>
                                                 </constraints>
                                             </visualEffectView>
@@ -1071,7 +1073,7 @@
                                             <customView translatesAutoresizingMaskIntoConstraints="NO" id="uGw-vW-vGX" customClass="ImageCurveControl" customModule="ImageCat" customModuleProvider="target">
                                                 <rect key="frame" x="0.0" y="26" width="288" height="160"/>
                                             </customView>
-                                            <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="mA8-yb-Q8K">
+                                            <button verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="mA8-yb-Q8K">
                                                 <rect key="frame" x="-7" y="-7" width="122" height="32"/>
                                                 <buttonCell key="cell" type="push" title="Curve초기화" bezelStyle="rounded" image="gearshape.fill" catalog="system" imagePosition="leading" alignment="center" borderStyle="border" imageScaling="proportionallyDown" inset="2" id="l4p-QK-HUF">
                                                     <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
@@ -1083,11 +1085,11 @@
                                             </button>
                                         </subviews>
                                         <constraints>
-                                            <constraint firstItem="uGw-vW-vGX" firstAttribute="leading" secondItem="20A-NM-rUc" secondAttribute="leading" id="1nb-Sk-xHk"/>
-                                            <constraint firstAttribute="trailing" secondItem="uGw-vW-vGX" secondAttribute="trailing" id="6bO-7Q-hhF"/>
+                                            <constraint firstItem="uGw-vW-vGX" firstAttribute="leading" secondItem="20A-NM-rUc" secondAttribute="leading" priority="750" id="1nb-Sk-xHk"/>
+                                            <constraint firstAttribute="trailing" secondItem="uGw-vW-vGX" secondAttribute="trailing" priority="750" id="6bO-7Q-hhF"/>
                                             <constraint firstItem="mA8-yb-Q8K" firstAttribute="top" secondItem="uGw-vW-vGX" secondAttribute="bottom" constant="6" id="HhN-hp-TZn"/>
                                             <constraint firstItem="mA8-yb-Q8K" firstAttribute="leading" secondItem="20A-NM-rUc" secondAttribute="leading" id="Ovc-ar-xjW"/>
-                                            <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="mA8-yb-Q8K" secondAttribute="trailing" constant="8" id="lSY-rb-VbT"/>
+                                            <constraint firstAttribute="trailing" relation="greaterThanOrEqual" secondItem="mA8-yb-Q8K" secondAttribute="trailing" priority="750" constant="8" id="lSY-rb-VbT"/>
                                             <constraint firstItem="uGw-vW-vGX" firstAttribute="top" secondItem="20A-NM-rUc" secondAttribute="top" id="v51-Yj-ZP5"/>
                                             <constraint firstAttribute="bottom" secondItem="mA8-yb-Q8K" secondAttribute="bottom" id="y0N-IL-i6s"/>
                                         </constraints>

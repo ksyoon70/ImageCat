@@ -58,14 +58,6 @@ class ImagePreviewViewController: NSViewController {
         updateImage()
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        
-        ownSplitViewItem?.minimumThickness = 220
-        ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
-
-    }
-
     private func configureView() {
         view.wantsLayer = true
         view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
@@ -147,35 +139,6 @@ class ImagePreviewViewController: NSViewController {
         annotationOverlayView.isEditingEnabled = isEnabled
     }
 
-    private var ownSplitViewItem: NSSplitViewItem? {
-        return (parent as? NSSplitViewController)?.splitViewItems
-            .first { $0.viewController === self }
-    }
-
-    // 프리뷰 영역과 인접 영역의 폭을 마우스로 조절할 수 있도록 Split View 제한값을 명시한다.
-    private func configureResizableSplitViewItems() {
-        guard let splitViewController = parent as? NSSplitViewController else { return }
-
-        for splitViewItem in splitViewController.splitViewItems {
-            splitViewItem.canCollapse = false
-            splitViewItem.maximumThickness = CGFloat.greatestFiniteMagnitude
-        }
-
-        ownSplitViewItem?.minimumThickness = 160
-        ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
-        ownSplitViewItem?.holdingPriority = .defaultLow
-
-        splitViewController.splitViewItems
-            .first { $0.viewController is ImageControlViewController }?
-            .minimumThickness = 180
-        splitViewController.splitViewItems
-            .first { $0.viewController is ImageControlViewController }?
-            .maximumThickness = CGFloat.greatestFiniteMagnitude
-        splitViewController.splitViewItems
-            .first { $0.viewController is ImageControlViewController }?
-            .holdingPriority = .defaultLow
-    }
-    
     // 커브를 이미지 미리보기에 적용한다. 드래그 중에는 빠른 저해상도 렌더링을 사용한다.
     func applyCurve(using curveControl: ImageCurveControl, isInteractive: Bool = false) {
         guard let originalImage = originalImage,

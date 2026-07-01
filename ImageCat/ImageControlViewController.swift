@@ -49,30 +49,6 @@ class ImageControlViewController: NSViewController{
         setInitialControlSplitViewHeightsIfNeeded()
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-
-        // Split View item과 curveControl frame이 모두 준비된 뒤 control pane 폭을 고정한다.
-        configureFixedSplitViewItemWidth()
-    }
-
-    private var ownSplitViewItem: NSSplitViewItem? {
-        return (parent as? NSSplitViewController)?.splitViewItems
-            .first { $0.viewController === self }
-    }
-
-    private func configureFixedSplitViewItemWidth() {
-        view.layoutSubtreeIfNeeded()
-
-        let width = ceil(curveControl.frame.width)
-        guard width > 0 else { return }
-
-        ownSplitViewItem?.canCollapse = false
-        // ImageCurveControl의 설계 폭을 pane 폭으로 삼기 위해 최소/최대 폭을 같은 값으로 묶는다.
-        ownSplitViewItem?.minimumThickness = width*2/3
-        ownSplitViewItem?.maximumThickness = width
-    }
-
     private func setInitialControlSplitViewHeightsIfNeeded() {
         guard !didSetInitialControlSplitPositions,
               controlSplitView.subviews.count == 3,

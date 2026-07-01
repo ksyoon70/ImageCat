@@ -15,6 +15,7 @@
 		613CFC442FF39E6A0070F046 /* AnnotationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613CFC432FF39E6A0070F046 /* AnnotationModels.swift */; };
 		613CFC462FF3A0D10070F046 /* ColorDotView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613CFC452FF3A0D10070F046 /* ColorDotView.swift */; };
 		613CFC482FF3B1670070F046 /* DocumentWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613CFC472FF3B1670070F046 /* DocumentWindowController.swift */; };
+		613CFC4A2FF4A8E90070F046 /* MainSplitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613CFC492FF4A8E90070F046 /* MainSplitViewController.swift */; };
 		61639A462F75DF8600167974 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61639A452F75DF8600167974 /* AppDelegate.swift */; };
 		61639A482F75DF8600167974 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61639A472F75DF8600167974 /* ViewController.swift */; };
 		61639A4A2F75DF8600167974 /* Document.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61639A492F75DF8600167974 /* Document.swift */; };
@@ -32,6 +33,7 @@
 		613CFC432FF39E6A0070F046 /* AnnotationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationModels.swift; sourceTree = "<group>"; };
 		613CFC452FF3A0D10070F046 /* ColorDotView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorDotView.swift; sourceTree = "<group>"; };
 		613CFC472FF3B1670070F046 /* DocumentWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentWindowController.swift; sourceTree = "<group>"; };
+		613CFC492FF4A8E90070F046 /* MainSplitViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainSplitViewController.swift; sourceTree = "<group>"; };
 		61639A422F75DF8600167974 /* ImageCat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ImageCat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		61639A452F75DF8600167974 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		61639A472F75DF8600167974 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -89,6 +91,7 @@
 				613CFC432FF39E6A0070F046 /* AnnotationModels.swift */,
 				613CFC452FF3A0D10070F046 /* ColorDotView.swift */,
 				613CFC472FF3B1670070F046 /* DocumentWindowController.swift */,
+				613CFC492FF4A8E90070F046 /* MainSplitViewController.swift */,
 			);
 			path = ImageCat;
 			sourceTree = "<group>";
@@ -171,6 +174,7 @@
 				612260B12F8E2811002BD7DD /* SidebarItem.swift in Sources */,
 				61056C7C2FE18EBA00023A2B /* ImageControlViewController.swift in Sources */,
 				612260B32F8E3000002BD7DD /* ImagePreviewViewController.swift in Sources */,
+				613CFC4A2FF4A8E90070F046 /* MainSplitViewController.swift in Sources */,
 				613CFC482FF3B1670070F046 /* DocumentWindowController.swift in Sources */,
 				61056C7E2FE1929100023A2B /* ImageCurveControl.swift in Sources */,
 				61639A462F75DF8600167974 /* AppDelegate.swift in Sources */,

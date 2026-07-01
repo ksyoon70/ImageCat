@@ -55,12 +55,6 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
         reloadFiles()
     }
 
-    override func viewDidAppear() {
-        super.viewDidAppear()
-
-        configureResizableSplitViewItem()
-    }
-
     override var representedObject: Any? {
         didSet {
         }
@@ -126,7 +120,7 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
         configureToolbar()
 
         tableView.headerView = NSTableHeaderView()
-        tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
+        tableView.columnAutoresizingStyle = .noColumnAutoresizing
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.allowsMultipleSelection = false
         tableView.dataSource = self
@@ -143,7 +137,7 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -328,20 +322,6 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
         return (parent as? NSSplitViewController)?.splitViewItems
             .compactMap { $0.viewController as? ImagePreviewViewController }
             .first
-    }
-
-    private var ownSplitViewItem: NSSplitViewItem? {
-        return (parent as? NSSplitViewController)?.splitViewItems
-            .first { $0.viewController === self }
-    }
-
-    // 파일 리스트는 긴 경로/컬럼 폭보다 사용자가 조절한 Split View 폭을 우선한다.
-    private func configureResizableSplitViewItem() {
-        ownSplitViewItem?.canCollapse = false
-        // 너무 좁아지는 것만 막고, preview 영역과 공간을 주고받을 수 있게 최소폭을 낮게 둔다.
-        ownSplitViewItem?.minimumThickness = 100
-        ownSplitViewItem?.maximumThickness = CGFloat.greatestFiniteMagnitude
-        ownSplitViewItem?.holdingPriority = .defaultLow
     }
 
     private static func isImageURL(_ url: URL) -> Bool {
