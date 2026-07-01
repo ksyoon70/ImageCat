@@ -8,6 +8,19 @@
 import Cocoa
 
 class ImageControlViewController: NSViewController{
+    private enum PolygonLabelColumn {
+        static let row = NSUserInterfaceItemIdentifier("PolygonLabelRowColumn")
+        static let cell = NSUserInterfaceItemIdentifier("PolygonLabelRowCell")
+    }
+
+    private enum PolygonLabelLayout {
+        static let checkboxLeading: CGFloat = 8
+        static let checkboxSize: CGFloat = 18
+        static let colorDotSize: CGFloat = 12
+        static let checkboxToLabelSpacing: CGFloat = 10
+        static let labelToColorSpacing: CGFloat = 8
+        static let trailingPadding: CGFloat = 8
+    }
 
     @IBOutlet weak var controlSplitView: NSSplitView!
     @IBOutlet weak var curveControl: ImageCurveControl!
@@ -42,11 +55,13 @@ class ImageControlViewController: NSViewController{
         
         polygonLabelsTableView.dataSource = self
         polygonLabelsTableView.delegate = self
+        configurePolygonLabelsTableView()
     }
 
     override func viewDidLayout() {
         super.viewDidLayout()
         setInitialControlSplitViewHeightsIfNeeded()
+        updatePolygonLabelColumnWidth()
     }
 
     private func setInitialControlSplitViewHeightsIfNeeded() {
@@ -99,7 +114,50 @@ class ImageControlViewController: NSViewController{
 
     private func reloadPolygonLabelsTableIfLoaded() {
         guard isViewLoaded, let polygonLabelsTableView = polygonLabelsTableView else { return }
+        updatePolygonLabelColumnWidth()
         polygonLabelsTableView.reloadData()
+    }
+
+    private func configurePolygonLabelsTableView() {
+        polygonLabelsTableView.columnAutoresizingStyle = .noColumnAutoresizing
+        polygonLabelsTableView.intercellSpacing = .zero
+        polygonLabelsTableView.headerView = nil
+        polygonLabelsTableView.allowsColumnResizing = false
+        polygonLabelsTableView.tableColumns.forEach { polygonLabelsTableView.removeTableColumn($0) }
+
+        let column = NSTableColumn(identifier: PolygonLabelColumn.row)
+        column.title = ""
+        column.minWidth = 0
+        column.maxWidth = CGFloat.greatestFiniteMagnitude
+        column.resizingMask = .autoresizingMask
+        polygonLabelsTableView.addTableColumn(column)
+
+        updatePolygonLabelColumnWidth()
+    }
+
+    private func updatePolygonLabelColumnWidth() {
+        guard let column = polygonLabelsTableView.tableColumn(withIdentifier: PolygonLabelColumn.row) else { return }
+        let width = max(polygonLabelsTableView.bounds.width, polygonLabelContentWidth())
+        column.width = width
+        column.minWidth = width
+        column.maxWidth = CGFloat.greatestFiniteMagnitude
+    }
+
+    private func polygonLabelContentWidth() -> CGFloat {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        ]
+        let widestLabelWidth = polygonLabelRows
+            .map { ceil(($0.label as NSString).size(withAttributes: attributes).width) }
+            .max() ?? 0
+
+        return PolygonLabelLayout.checkboxLeading
+            + PolygonLabelLayout.checkboxSize
+            + PolygonLabelLayout.checkboxToLabelSpacing
+            + widestLabelWidth
+            + PolygonLabelLayout.labelToColorSpacing
+            + PolygonLabelLayout.colorDotSize
+            + PolygonLabelLayout.trailingPadding
     }
 
     private func applyPolygonVisibilityToPreview() {
@@ -128,91 +186,110 @@ extension ImageControlViewController: NSTableViewDataSource, NSTableViewDelegate
         guard row < polygonLabelRows.count else { return nil }
         let item = polygonLabelRows[row]
 
-        if tableColumn?.identifier.rawValue == "CheckColumn" {
-            let cell = reusableCell(
-                for: tableView,
-                identifier: NSUserInterfaceItemIdentifier("CheckCell")
-            )
-            let checkbox = cell.subviews.compactMap { $0 as? NSButton }.first ?? makeCheckbox()
-            checkbox.title = ""
-            checkbox.state = item.isVisible ? .on : .off
-            checkbox.tag = row
-            checkbox.target = self
-            checkbox.action = #selector(polygonLabelCheckboxChanged(_:))
-            if checkbox.superview == nil {
-                checkbox.translatesAutoresizingMaskIntoConstraints = false
-                cell.addSubview(checkbox)
-                NSLayoutConstraint.activate([
-                    checkbox.leadingAnchor.constraint(equalTo: cell.leadingAnchor),
-                    checkbox.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
-                ])
-            }
-            return cell
-        }
-
-        if tableColumn?.identifier.rawValue == "LabelColumn" {
-            let cell = reusableCell(
-                for: tableView,
-                identifier: NSUserInterfaceItemIdentifier("LabelCell")
-            )
-            let textField = cell.textField ?? makeLabelTextField()
-            textField.stringValue = item.label
-            if textField.superview == nil {
-                textField.translatesAutoresizingMaskIntoConstraints = false
-                cell.addSubview(textField)
-                cell.textField = textField
-                NSLayoutConstraint.activate([
-                    textField.leadingAnchor.constraint(equalTo: cell.leadingAnchor),
-                    textField.trailingAnchor.constraint(equalTo: cell.trailingAnchor),
-                    textField.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
-                ])
-            }
-            return cell
-        }
-
-        if tableColumn?.identifier.rawValue == "ColorColumn" {
-            let cell = reusableCell(
-                for: tableView,
-                identifier: NSUserInterfaceItemIdentifier("ColorCell")
-            )
-            cell.subviews.forEach { $0.removeFromSuperview() }
-
-            let dot = ColorDotView(color: item.color)
-            dot.translatesAutoresizingMaskIntoConstraints = false
-            cell.addSubview(dot)
-
-            NSLayoutConstraint.activate([
-                dot.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
-                dot.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-                dot.widthAnchor.constraint(equalToConstant: 12),
-                dot.heightAnchor.constraint(equalToConstant: 12)
-            ])
-
-            return cell
-        }
-
-        return nil
-    }
-
-    private func reusableCell(for tableView: NSTableView, identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
-        if let cell = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView {
-            return cell
-        }
-
-        let cell = NSTableCellView()
-        cell.identifier = identifier
+        let cell = tableView.makeView(
+            withIdentifier: PolygonLabelColumn.cell,
+            owner: self
+        ) as? PolygonLabelRowCellView ?? PolygonLabelRowCellView()
+        cell.identifier = PolygonLabelColumn.cell
+        cell.configure(
+            label: item.label,
+            color: item.color,
+            isVisible: item.isVisible,
+            row: row,
+            target: self,
+            action: #selector(polygonLabelCheckboxChanged(_:))
+        )
         return cell
     }
+}
 
-    private func makeCheckbox() -> NSButton {
-        let checkbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
-        checkbox.allowsMixedState = false
-        return checkbox
+private final class PolygonLabelRowCellView: NSTableCellView {
+    private enum Layout {
+        static let checkboxLeading: CGFloat = 8
+        static let checkboxSize: CGFloat = 18
+        static let checkboxToLabelSpacing: CGFloat = 10
+        static let labelToColorSpacing: CGFloat = 8
+        static let colorDotSize: CGFloat = 12
     }
 
-    private func makeLabelTextField() -> NSTextField {
-        let textField = NSTextField(labelWithString: "")
-        textField.lineBreakMode = .byTruncatingTail
-        return textField
+    private let checkbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+    private let labelField = NSTextField(labelWithString: "")
+    private let dotView = ColorDotView(color: .systemBlue)
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configureView()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureView()
+    }
+
+    func configure(
+        label: String,
+        color: NSColor,
+        isVisible: Bool,
+        row: Int,
+        target: AnyObject?,
+        action: Selector
+    ) {
+        checkbox.state = isVisible ? .on : .off
+        checkbox.tag = row
+        checkbox.target = target
+        checkbox.action = action
+
+        labelField.stringValue = label
+        dotView.color = color
+
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+
+        checkbox.frame = NSRect(
+            x: Layout.checkboxLeading,
+            y: centeredY(for: Layout.checkboxSize),
+            width: Layout.checkboxSize,
+            height: Layout.checkboxSize
+        )
+
+        let labelSize = labelField.intrinsicContentSize
+        let labelX = checkbox.frame.maxX + Layout.checkboxToLabelSpacing
+        labelField.frame = NSRect(
+            x: labelX,
+            y: centeredY(for: labelSize.height),
+            width: ceil(labelSize.width),
+            height: labelSize.height
+        )
+
+        dotView.frame = NSRect(
+            x: labelField.frame.maxX + Layout.labelToColorSpacing,
+            y: centeredY(for: Layout.colorDotSize),
+            width: Layout.colorDotSize,
+            height: Layout.colorDotSize
+        )
+    }
+
+    private func configureView() {
+        checkbox.title = ""
+        checkbox.allowsMixedState = false
+        checkbox.translatesAutoresizingMaskIntoConstraints = true
+
+        labelField.textColor = .labelColor
+        labelField.font = .systemFont(ofSize: NSFont.systemFontSize)
+        labelField.lineBreakMode = .byClipping
+        labelField.translatesAutoresizingMaskIntoConstraints = true
+
+        dotView.translatesAutoresizingMaskIntoConstraints = true
+
+        addSubview(checkbox)
+        addSubview(labelField)
+        addSubview(dotView)
+    }
+
+    private func centeredY(for height: CGFloat) -> CGFloat {
+        return max(0, (bounds.height - height) / 2)
     }
 }
