@@ -711,6 +711,9 @@
                                 <toolbarItem implicitItemIdentifier="4241A725-9475-42CC-979E-D11F57CF4AFC" label="Save" paletteLabel="Save" tag="-1" image="square.and.arrow.down" catalog="system" bordered="YES" id="6vG-98-JZD">
                                     <size key="minSize" width="27" height="25"/>
                                     <size key="maxSize" width="27" height="25"/>
+                                    <connections>
+                                        <action selector="saveAnnotation:" target="jGA-0Y-lOj" id="RVh-tp-Nx9"/>
+                                    </connections>
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="03A3D7EA-0734-403A-A994-52E0BCD48B9A" label="Delete File" paletteLabel="Delete File" tag="-1" image="trash" catalog="system" bordered="YES" id="jo4-fC-hxd">
                                     <size key="minSize" width="27" height="25"/>
@@ -719,6 +722,9 @@
                                 <toolbarItem implicitItemIdentifier="8C0955AF-A223-407D-814A-8085C0B47E18" label="Create Polygons" paletteLabel="Create Polygons" tag="-1" image="plus.viewfinder" catalog="system" bordered="YES" id="RE2-pX-4d3">
                                     <size key="minSize" width="28" height="25"/>
                                     <size key="maxSize" width="28" height="25"/>
+                                    <connections>
+                                        <action selector="toggleCreatePolygons:" target="jGA-0Y-lOj" id="kBK-pw-xE5"/>
+                                    </connections>
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="A544BA38-8B74-4079-B762-5DC9EDAA0272" label="Edit Polygons" paletteLabel="Edit Polygons" tag="-1" image="pencil" catalog="system" bordered="YES" id="wvj-33-Gcs">
                                     <size key="minSize" width="26" height="25"/>

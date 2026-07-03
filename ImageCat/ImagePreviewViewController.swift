@@ -6,6 +6,12 @@
 import Cocoa
 import CoreImage
 
+enum PolygonInteractionMode {
+    case inactive
+    case create
+    case edit
+}
+
 class ImagePreviewViewController: NSViewController {
     // 백그라운드 렌더링 큐로 넘길 커브 미리보기 요청 정보를 한데 묶는다.
     private struct RenderRequest {
@@ -71,6 +77,14 @@ class ImagePreviewViewController: NSViewController {
         imageView.translatesAutoresizingMaskIntoConstraints = false
 
         annotationOverlayView.translatesAutoresizingMaskIntoConstraints = false
+        // 새 도형이 추가되면 오른쪽 라벨 목록도 즉시 최신 annotation 기준으로 갱신한다.
+        annotationOverlayView.onAnnotationChanged = { [weak self] annotation in
+            self?.imageControlViewController?.updatePolygonLabels(from: annotation)
+        }
+        // 오버레이는 화면 입력만 담당하고, label 입력 창은 뷰 컨트롤러가 띄운다.
+        annotationOverlayView.onLabelRequested = { [weak self] labels in
+            self?.requestAnnotationLabel(existingLabels: labels)
+        }
 
         emptyLabel.textColor = .secondaryLabelColor
         emptyLabel.alignment = .center
@@ -135,8 +149,28 @@ class ImagePreviewViewController: NSViewController {
         return annotationOverlayView.isEditingEnabled
     }
 
+    var polygonInteractionMode: PolygonInteractionMode {
+        return annotationOverlayView.interactionMode
+    }
+
     func setPolygonEditingEnabled(_ isEnabled: Bool) {
         annotationOverlayView.isEditingEnabled = isEnabled
+    }
+
+    func setPolygonInteractionMode(_ mode: PolygonInteractionMode) {
+        annotationOverlayView.interactionMode = mode
+    }
+
+    func saveCurrentAnnotation() throws {
+        guard let imageURL else {
+            throw AnnotationSaveError.missingImage
+        }
+
+        guard let annotation = annotationOverlayView.annotation else {
+            throw AnnotationSaveError.missingAnnotation
+        }
+
+        try Self.saveAnnotation(annotation, for: imageURL)
     }
 
     // 커브를 이미지 미리보기에 적용한다. 드래그 중에는 빠른 저해상도 렌더링을 사용한다.
@@ -275,7 +309,15 @@ class ImagePreviewViewController: NSViewController {
 
     private static func loadAnnotation(for imageURL: URL, fallbackImageSize: NSSize?) -> LabelMeAnnotation? {
         let jsonURL = imageURL.deletingPathExtension().appendingPathExtension("json")
-        guard FileManager.default.fileExists(atPath: jsonURL.path) else { return nil }
+        guard FileManager.default.fileExists(atPath: jsonURL.path) else {
+            guard let fallbackImageSize = fallbackImageSize else { return nil }
+            // JSON 파일이 아직 없어도 create 모드에서 새 라벨을 만들 수 있게 빈 annotation을 준비한다.
+            return LabelMeAnnotation(
+                shapes: [],
+                imageHeight: fallbackImageSize.height,
+                imageWidth: fallbackImageSize.width
+            )
+        }
 
         do {
             let data = try Data(contentsOf: jsonURL)
@@ -289,6 +331,192 @@ class ImagePreviewViewController: NSViewController {
             print("Annotation JSON 읽기 실패: \(jsonURL.path) - \(error.localizedDescription)")
             return nil
         }
+    }
+
+    private func requestAnnotationLabel(existingLabels: [String]) -> String? {
+        // 도형이 닫히거나 rectangle 드래그가 끝난 뒤 label을 확정받는다.
+        let prompt = AnnotationLabelPrompt(existingLabels: existingLabels)
+        return prompt.runModal(attachedTo: view.window)
+    }
+
+    private static func saveAnnotation(_ annotation: LabelMeAnnotation, for imageURL: URL) throws {
+        let jsonURL = imageURL.deletingPathExtension().appendingPathExtension("json")
+        var root: [String: Any] = [:]
+
+        // LabelMe JSON의 부가 필드는 보존하고 shapes/이미지 크기만 최신 상태로 갱신한다.
+        if FileManager.default.fileExists(atPath: jsonURL.path) {
+            let data = try Data(contentsOf: jsonURL)
+            root = (try JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        }
+
+        let existingShapes = root["shapes"] as? [[String: Any]] ?? []
+        root["imageWidth"] = jsonNumber(from: annotation.imageWidth)
+        root["imageHeight"] = jsonNumber(from: annotation.imageHeight)
+        root["shapes"] = annotation.shapes.enumerated().map { index, shape in
+            var shapeJSON = index < existingShapes.count ? existingShapes[index] : [:]
+            shapeJSON["label"] = shape.label
+            shapeJSON["points"] = shape.points.map { point in
+                [jsonNumber(from: point.x), jsonNumber(from: point.y)]
+            }
+
+            if let shapeType = shape.shapeType {
+                shapeJSON["shape_type"] = shapeType
+            } else {
+                shapeJSON.removeValue(forKey: "shape_type")
+            }
+
+            return shapeJSON
+        }
+
+        let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted])
+        try data.write(to: jsonURL, options: .atomic)
+    }
+
+    private static func jsonNumber(from value: CGFloat) -> Any {
+        let roundedValue = value.rounded()
+        if abs(value - roundedValue) < 0.0001 {
+            return Int(roundedValue)
+        }
+
+        return Double(value)
+    }
+}
+
+private enum AnnotationSaveError: LocalizedError {
+    case missingImage
+    case missingAnnotation
+
+    var errorDescription: String? {
+        switch self {
+        case .missingImage:
+            return "저장할 이미지가 선택되어 있지 않습니다."
+        case .missingAnnotation:
+            return "저장할 라벨링 JSON이 없습니다."
+        }
+    }
+}
+
+// create 모드에서 새 도형을 확정할 때 label을 입력하거나 기존 label을 고르게 하는 창이다.
+private final class AnnotationLabelPrompt: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+    private enum Layout {
+        static let width: CGFloat = 520
+        static let height: CGFloat = 300
+        static let fieldHeight: CGFloat = 32
+        static let spacing: CGFloat = 12
+        static let groupFieldWidth: CGFloat = 110
+    }
+
+    private let labels: [String]
+    private let labelField = NSTextField()
+    private let groupField = NSTextField()
+    private let tableView = NSTableView()
+
+    init(existingLabels: [String]) {
+        // 같은 label이 여러 shape에 쓰여도 목록에는 한 번만 보여준다.
+        var seenLabels = Set<String>()
+        labels = existingLabels.filter { label in
+            seenLabels.insert(label).inserted
+        }
+        super.init()
+    }
+
+    func runModal(attachedTo window: NSWindow?) -> String? {
+        let alert = NSAlert()
+        alert.messageText = "Label"
+        alert.informativeText = ""
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        alert.accessoryView = makeAccessoryView()
+        alert.window.initialFirstResponder = labelField
+
+        // 새 라벨을 빠르게 추가할 수 있도록 가장 최근 label을 기본값으로 둔다.
+        if let lastLabel = labels.last {
+            labelField.stringValue = lastLabel
+            tableView.selectRowIndexes(IndexSet(integer: labels.count - 1), byExtendingSelection: false)
+        }
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return nil }
+
+        let label = labelField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return label.isEmpty ? nil : label
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        return labels.count
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard row < labels.count else { return nil }
+
+        let identifier = NSUserInterfaceItemIdentifier("AnnotationLabelPromptCell")
+        let field = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTextField
+            ?? NSTextField(labelWithString: "")
+        field.identifier = identifier
+        field.font = .systemFont(ofSize: 18)
+        field.lineBreakMode = .byTruncatingTail
+        field.stringValue = labels[row]
+        return field
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        let row = tableView.selectedRow
+        guard row >= 0, row < labels.count else { return }
+        // 목록의 label을 선택하면 입력칸에 복사해서 바로 OK할 수 있게 한다.
+        labelField.stringValue = labels[row]
+        labelField.selectText(nil)
+    }
+
+    private func makeAccessoryView() -> NSView {
+        let accessoryView = NSView(
+            frame: NSRect(x: 0, y: 0, width: Layout.width, height: Layout.height)
+        )
+
+        labelField.font = .systemFont(ofSize: 22)
+        labelField.placeholderString = "Label"
+        labelField.frame = NSRect(
+            x: 0,
+            y: Layout.height - Layout.fieldHeight,
+            width: Layout.width - Layout.groupFieldWidth - Layout.spacing,
+            height: Layout.fieldHeight
+        )
+
+        groupField.font = .systemFont(ofSize: 22)
+        groupField.placeholderString = "Group ID"
+        groupField.isEnabled = false
+        groupField.frame = NSRect(
+            x: labelField.frame.maxX + Layout.spacing,
+            y: labelField.frame.minY,
+            width: Layout.groupFieldWidth,
+            height: Layout.fieldHeight
+        )
+
+        let scrollView = NSScrollView(
+            frame: NSRect(
+                x: 0,
+                y: 0,
+                width: Layout.width,
+                height: labelField.frame.minY - Layout.spacing
+            )
+        )
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("AnnotationLabelPromptColumn"))
+        column.width = Layout.width
+        tableView.addTableColumn(column)
+        tableView.headerView = nil
+        tableView.rowHeight = 28
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.frame = scrollView.bounds
+
+        scrollView.documentView = tableView
+
+        accessoryView.addSubview(labelField)
+        accessoryView.addSubview(groupField)
+        accessoryView.addSubview(scrollView)
+        return accessoryView
     }
 }
 
@@ -306,11 +534,50 @@ private extension NSImage {
 }
 
 private final class AnnotationOverlayView: NSView {
+    private enum HandleStyle {
+        static let normalDiameter: CGFloat = 10
+        static let selectedSide: CGFloat = 12
+        static let hitDiameter: CGFloat = 18
+        static let strokeWidth: CGFloat = 2
+    }
+
+    // create 모드에서 임시로 그리는 선, 점, 닫힘 표시의 화면 스타일이다.
+    private enum CreationStyle {
+        static let handleDiameter: CGFloat = 18
+        static let closeDiameter: CGFloat = 64
+        static let closeHitDiameter: CGFloat = 34
+        static let lineWidth: CGFloat = 3
+        static let minimumSegmentLength: CGFloat = 3
+        static let minimumRectangleSide: CGFloat = 3
+        static let color = NSColor.systemGreen
+    }
+
+    // Create Polygons 버튼은 polygon이 기본이고, Cmd+R/Cmd+J로 생성 타입만 바꾼다.
+    private enum CreationShapeKind {
+        case polygon
+        case rectangle
+    }
+
+    private struct VertexSelection: Equatable {
+        let shapeIndex: Int
+        let vertexIndex: Int
+    }
+
     var annotation: LabelMeAnnotation? = nil {
         didSet {
             labelColors = LabelColorProvider.colors(for: annotation?.shapes.map { $0.label } ?? [])
             if oldValue?.shapes.count != annotation?.shapes.count {
-                visibleShapeIndexes = Set(annotation?.shapes.indices ?? 0..<0)
+                let newIndexes = Set(annotation?.shapes.indices ?? 0..<0)
+                if oldValue == nil || visibleShapeIndexes.isEmpty {
+                    visibleShapeIndexes = newIndexes
+                } else {
+                    // 새 shape를 추가해도 사용자가 꺼 둔 기존 label 표시 상태는 유지한다.
+                    let oldIndexes = Set(oldValue?.shapes.indices ?? 0..<0)
+                    let addedIndexes = newIndexes.subtracting(oldIndexes)
+                    visibleShapeIndexes = visibleShapeIndexes
+                        .intersection(newIndexes)
+                        .union(addedIndexes)
+                }
             }
             needsDisplay = true
         }
@@ -325,19 +592,47 @@ private final class AnnotationOverlayView: NSView {
     private var labelColors: [String: NSColor] = [:]
     private var trackingArea: NSTrackingArea?
     private var hoveredShapeIndex: Int?
-    private var draggingShapeIndex: Int?
-    private var lastDragImagePoint: CGPoint?
+    private var hoveredVertex: VertexSelection?
+    private var draggingVertex: VertexSelection?
+    private var creationShapeKind: CreationShapeKind = .polygon
+    private var polygonCreationPoints: [CGPoint] = []
+    private var creationDragStartPoint: CGPoint?
+    private var creationDragCurrentPoint: CGPoint?
+    private var isCloseToFirstCreationPoint = false
+    // 생성 확정과 label 입력은 상위 컨트롤러와 협력해서 처리한다.
+    var onAnnotationChanged: ((LabelMeAnnotation?) -> Void)?
+    var onLabelRequested: (([String]) -> String?)?
 
-    var isEditingEnabled = false {
+    var interactionMode: PolygonInteractionMode = .inactive {
         didSet {
+            guard oldValue != interactionMode else { return }
+            // 모드가 바뀌면 선택 핸들과 작성 중인 임시 도형을 모두 정리한다.
             hoveredShapeIndex = nil
-            draggingShapeIndex = nil
-            lastDragImagePoint = nil
+            hoveredVertex = nil
+            draggingVertex = nil
+            cancelCreation()
+            if interactionMode == .create {
+                // create 모드는 항상 polygon 생성에서 시작하고 키보드 단축키를 받는다.
+                creationShapeKind = .polygon
+                window?.makeFirstResponder(self)
+            }
             needsDisplay = true
             window?.invalidateCursorRects(for: self)
-            if !isEditingEnabled {
+            switch interactionMode {
+            case .create:
+                NSCursor.crosshair.set()
+            case .inactive, .edit:
                 NSCursor.arrow.set()
             }
+        }
+    }
+
+    var isEditingEnabled: Bool {
+        get {
+            return interactionMode == .edit
+        }
+        set {
+            interactionMode = newValue ? .edit : .inactive
         }
     }
 
@@ -345,8 +640,20 @@ private final class AnnotationOverlayView: NSView {
         return true
     }
 
+    override var acceptsFirstResponder: Bool {
+        return true
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
-        return isEditingEnabled ? self : nil
+        return interactionMode == .inactive ? nil : self
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+
+        if interactionMode == .create {
+            addCursorRect(bounds, cursor: .crosshair)
+        }
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -362,6 +669,7 @@ private final class AnnotationOverlayView: NSView {
         }
 
         let options: NSTrackingArea.Options = [
+            .cursorUpdate,
             .mouseMoved,
             .mouseEnteredAndExited,
             .activeInKeyWindow,
@@ -372,68 +680,142 @@ private final class AnnotationOverlayView: NSView {
         self.trackingArea = trackingArea
     }
 
-    override func mouseMoved(with event: NSEvent) {
-        guard isEditingEnabled else { return }
+    override func cursorUpdate(with event: NSEvent) {
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
 
-        let location = convert(event.locationInWindow, from: nil)
-        updateHoveredShape(at: location)
+    override func mouseMoved(with event: NSEvent) {
+        updateCursor(at: convert(event.locationInWindow, from: nil))
     }
 
     override func mouseExited(with event: NSEvent) {
         hoveredShapeIndex = nil
-        NSCursor.arrow.set()
+        hoveredVertex = nil
+        if interactionMode == .create {
+            NSCursor.crosshair.set()
+        } else {
+            NSCursor.arrow.set()
+        }
         needsDisplay = true
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard isEditingEnabled else { return }
+        if interactionMode == .create {
+            // create 모드에서는 기존 shape hit-test를 하지 않고 새 도형 입력만 시작한다.
+            beginCreationDrag(at: convert(event.locationInWindow, from: nil))
+            return
+        }
+
+        guard interactionMode == .edit else { return }
 
         let location = convert(event.locationInWindow, from: nil)
-        draggingShapeIndex = shapeIndex(at: location)
-        hoveredShapeIndex = draggingShapeIndex
-        lastDragImagePoint = imagePoint(for: location)
+        let selectedVertex = vertexSelection(at: location)
+        draggingVertex = selectedVertex
+        hoveredVertex = selectedVertex
+        hoveredShapeIndex = selectedVertex?.shapeIndex ?? shapeIndex(at: location)
 
-        if draggingShapeIndex != nil {
-            NSCursor.closedHand.set()
+        if selectedVertex != nil {
+            NSCursor.pointingHand.set()
         }
 
         needsDisplay = true
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard isEditingEnabled,
-              let draggingShapeIndex = draggingShapeIndex,
+        if interactionMode == .create {
+            // polygon은 마지막 점에서 현재 위치까지, rectangle은 시작점에서 현재 위치까지 preview한다.
+            updateCreationDrag(at: convert(event.locationInWindow, from: nil))
+            return
+        }
+
+        guard interactionMode == .edit,
+              let draggingVertex = draggingVertex,
               var annotation = annotation,
-              annotation.shapes.indices.contains(draggingShapeIndex),
-              let previousImagePoint = lastDragImagePoint else {
+              annotation.shapes.indices.contains(draggingVertex.shapeIndex) else {
             return
         }
 
         let location = convert(event.locationInWindow, from: nil)
         guard let currentImagePoint = imagePoint(for: location) else { return }
 
-        let delta = CGPoint(
-            x: currentImagePoint.x - previousImagePoint.x,
-            y: currentImagePoint.y - previousImagePoint.y
-        )
-
-        for pointIndex in annotation.shapes[draggingShapeIndex].points.indices {
-            annotation.shapes[draggingShapeIndex].points[pointIndex].x += delta.x
-            annotation.shapes[draggingShapeIndex].points[pointIndex].y += delta.y
+        if isRectangle(annotation.shapes[draggingVertex.shapeIndex]) {
+            updateRectangleCorner(
+                in: &annotation.shapes[draggingVertex.shapeIndex],
+                vertexIndex: draggingVertex.vertexIndex,
+                to: currentImagePoint
+            )
+        } else if annotation.shapes[draggingVertex.shapeIndex].points.indices.contains(draggingVertex.vertexIndex) {
+            annotation.shapes[draggingVertex.shapeIndex].points[draggingVertex.vertexIndex].x = currentImagePoint.x
+            annotation.shapes[draggingVertex.shapeIndex].points[draggingVertex.vertexIndex].y = currentImagePoint.y
         }
 
         self.annotation = annotation
-        lastDragImagePoint = currentImagePoint
-        hoveredShapeIndex = draggingShapeIndex
-        NSCursor.closedHand.set()
+        hoveredShapeIndex = draggingVertex.shapeIndex
+        hoveredVertex = draggingVertex
+        NSCursor.pointingHand.set()
     }
 
     override func mouseUp(with event: NSEvent) {
-        draggingShapeIndex = nil
-        lastDragImagePoint = nil
+        if interactionMode == .create {
+            // 드래그 종료 시 polygon은 점을 추가하거나 닫고, rectangle은 바로 확정을 시도한다.
+            finishCreationDrag(at: convert(event.locationInWindow, from: nil))
+            return
+        }
+
+        draggingVertex = nil
 
         let location = convert(event.locationInWindow, from: nil)
-        updateHoveredShape(at: location)
+        updateCursor(at: location)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard interactionMode == .create else {
+            super.keyDown(with: event)
+            return
+        }
+
+        // Esc는 현재 그리고 있던 임시 polygon/rectangle을 취소한다.
+        if event.keyCode == 53 {
+            cancelCreation()
+            return
+        }
+
+        // create 모드 안에서 Cmd+R은 rectangle, Cmd+J는 polygon 생성으로 전환한다.
+        if event.modifierFlags.contains(.command),
+           let key = event.charactersIgnoringModifiers?.lowercased() {
+            switch key {
+            case "r":
+                setCreationShapeKind(.rectangle)
+                return
+            case "j":
+                setCreationShapeKind(.polygon)
+                return
+            default:
+                break
+            }
+        }
+
+        super.keyDown(with: event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard interactionMode == .create,
+              event.modifierFlags.contains(.command),
+              let key = event.charactersIgnoringModifiers?.lowercased() else {
+            return super.performKeyEquivalent(with: event)
+        }
+
+        // 메뉴 단축키로 소비되기 전에 create 모드 전환 키를 오버레이에서 먼저 처리한다.
+        switch key {
+        case "r":
+            setCreationShapeKind(.rectangle)
+            return true
+        case "j":
+            setCreationShapeKind(.polygon)
+            return true
+        default:
+            return super.performKeyEquivalent(with: event)
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -454,18 +836,18 @@ private final class AnnotationOverlayView: NSView {
         for (shapeIndex, shape) in annotation.shapes.enumerated() {
             guard visibleShapeIndexes.contains(shapeIndex) else { continue }
 
-            let viewPoints = shape.points.map { point in
-                CGPoint(
-                    x: imageRect.minX + point.x * imageRect.width / annotation.imageSize.width,
-                    y: imageRect.minY + point.y * imageRect.height / annotation.imageSize.height
-                )
+            let viewPoints = shape.points.map {
+                viewPoint(for: CGPoint(x: $0.x, y: $0.y), imageRect: imageRect, imageSize: annotation.imageSize)
             }
             guard viewPoints.count >= 2 else { continue }
 
             let color = labelColors[shape.label] ?? .systemBlue
             let path = makePath(for: shape, points: viewPoints)
+            let activeVertex = draggingVertex ?? hoveredVertex
+            let isActiveShape = isEditingEnabled &&
+                (shapeIndex == hoveredShapeIndex || shapeIndex == draggingVertex?.shapeIndex)
 
-            if isEditingEnabled && (shapeIndex == hoveredShapeIndex || shapeIndex == draggingShapeIndex) {
+            if isActiveShape {
                 color.withAlphaComponent(0.28).setFill()
                 path.fill()
             }
@@ -473,8 +855,15 @@ private final class AnnotationOverlayView: NSView {
             color.setStroke()
             path.lineWidth = 2
             path.stroke()
-            drawVertexHandles(at: viewPoints, color: color)
+            drawVertexHandles(
+                at: handleViewPoints(for: shape, imageRect: imageRect, imageSize: annotation.imageSize),
+                color: color,
+                activeVertexIndex: activeVertex?.shapeIndex == shapeIndex ? activeVertex?.vertexIndex : nil,
+                usesEditingStyle: isActiveShape
+            )
         }
+
+        drawCreationPreview(imageRect: imageRect, imageSize: annotation.imageSize)
     }
 
     private func fittedImageRect(for imageSize: NSSize) -> CGRect {
@@ -493,15 +882,7 @@ private final class AnnotationOverlayView: NSView {
         let path = NSBezierPath()
         path.lineWidth = 2
 
-        if shape.shapeType == "rectangle", points.count >= 2 {
-            let firstPoint = points[0]
-            let secondPoint = points[1]
-            let rect = CGRect(
-                x: min(firstPoint.x, secondPoint.x),
-                y: min(firstPoint.y, secondPoint.y),
-                width: abs(secondPoint.x - firstPoint.x),
-                height: abs(secondPoint.y - firstPoint.y)
-            )
+        if isRectangle(shape), let rect = rectangleBounds(for: points) {
             path.appendRect(rect)
         } else {
             path.move(to: points[0])
@@ -514,27 +895,450 @@ private final class AnnotationOverlayView: NSView {
         return path
     }
 
-    private func drawVertexHandles(at points: [CGPoint], color: NSColor) {
-        color.setFill()
+    private func drawVertexHandles(
+        at points: [CGPoint],
+        color: NSColor,
+        activeVertexIndex: Int?,
+        usesEditingStyle: Bool
+    ) {
+        let handleStrokeColor = color
+        let handleFillColor = usesEditingStyle ? NSColor.white : color
 
-        for point in points {
-            let handleRect = CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)
-            NSBezierPath(ovalIn: handleRect).fill()
+        for (index, point) in points.enumerated() {
+            let isSelectedVertex = activeVertexIndex == index
+            let side = isSelectedVertex ? HandleStyle.selectedSide : HandleStyle.normalDiameter
+            let handleRect = CGRect(
+                x: point.x - side / 2,
+                y: point.y - side / 2,
+                width: side,
+                height: side
+            )
+            let handlePath = isSelectedVertex
+                ? NSBezierPath(rect: handleRect)
+                : NSBezierPath(ovalIn: handleRect)
+
+            handleFillColor.setFill()
+            handlePath.fill()
+            handleStrokeColor.setStroke()
+            handlePath.lineWidth = HandleStyle.strokeWidth
+            handlePath.stroke()
         }
     }
 
-    private func updateHoveredShape(at location: CGPoint) {
-        let newHoveredShapeIndex = shapeIndex(at: location)
-        if newHoveredShapeIndex != hoveredShapeIndex {
-            hoveredShapeIndex = newHoveredShapeIndex
+    private func drawCreationPreview(imageRect: CGRect, imageSize: NSSize) {
+        guard interactionMode == .create else { return }
+
+        // 작성 중인 도형은 annotation에 넣기 전까지 preview로만 그린다.
+        switch creationShapeKind {
+        case .polygon:
+            drawPolygonCreationPreview(imageRect: imageRect, imageSize: imageSize)
+        case .rectangle:
+            drawRectangleCreationPreview(imageRect: imageRect, imageSize: imageSize)
+        }
+    }
+
+    private func drawPolygonCreationPreview(imageRect: CGRect, imageSize: NSSize) {
+        guard !polygonCreationPoints.isEmpty else { return }
+
+        let viewPoints = polygonCreationPoints.map {
+            viewPoint(for: $0, imageRect: imageRect, imageSize: imageSize)
+        }
+        let currentViewPoint = creationDragCurrentPoint.map {
+            viewPoint(for: $0, imageRect: imageRect, imageSize: imageSize)
+        }
+
+        let path = NSBezierPath()
+        path.lineWidth = CreationStyle.lineWidth
+        path.move(to: viewPoints[0])
+        for point in viewPoints.dropFirst() {
+            path.line(to: point)
+        }
+        if let currentViewPoint = currentViewPoint {
+            path.line(to: isCloseToFirstCreationPoint ? viewPoints[0] : currentViewPoint)
+        }
+
+        CreationStyle.color.setStroke()
+        path.stroke()
+
+        // 확정된 꼭지점과 현재 드래그 끝점을 초록 점으로 보여준다.
+        for point in viewPoints {
+            drawCreationHandle(at: point, diameter: CreationStyle.handleDiameter, filled: true)
+        }
+
+        if let currentViewPoint = currentViewPoint, !isCloseToFirstCreationPoint {
+            drawCreationHandle(at: currentViewPoint, diameter: CreationStyle.handleDiameter, filled: true)
+        }
+
+        if isCloseToFirstCreationPoint {
+            // 첫 점으로 돌아오면 닫을 수 있다는 신호로 큰 원을 그린다.
+            drawCreationHandle(at: viewPoints[0], diameter: CreationStyle.closeDiameter, filled: false)
+        }
+    }
+
+    private func drawRectangleCreationPreview(imageRect: CGRect, imageSize: NSSize) {
+        guard let startPoint = creationDragStartPoint,
+              let currentPoint = creationDragCurrentPoint,
+              let rect = rectangleBounds(for: [startPoint, currentPoint]) else {
+            return
+        }
+
+        let viewRect = CGRect(
+            x: imageRect.minX + rect.minX * imageRect.width / imageSize.width,
+            y: imageRect.minY + rect.minY * imageRect.height / imageSize.height,
+            width: rect.width * imageRect.width / imageSize.width,
+            height: rect.height * imageRect.height / imageSize.height
+        )
+        let path = NSBezierPath(rect: viewRect)
+        CreationStyle.color.setStroke()
+        path.lineWidth = CreationStyle.lineWidth
+        path.stroke()
+
+        drawCreationHandle(at: viewRect.origin, diameter: CreationStyle.handleDiameter, filled: true)
+        drawCreationHandle(
+            at: CGPoint(x: viewRect.maxX, y: viewRect.maxY),
+            diameter: CreationStyle.handleDiameter,
+            filled: true
+        )
+    }
+
+    private func drawCreationHandle(at point: CGPoint, diameter: CGFloat, filled: Bool) {
+        let handleRect = CGRect(
+            x: point.x - diameter / 2,
+            y: point.y - diameter / 2,
+            width: diameter,
+            height: diameter
+        )
+        let path = NSBezierPath(ovalIn: handleRect)
+        if filled {
+            CreationStyle.color.setFill()
+            path.fill()
+        } else {
+            NSColor.white.setFill()
+            path.fill()
+        }
+        CreationStyle.color.setStroke()
+        path.lineWidth = CreationStyle.lineWidth
+        path.stroke()
+    }
+
+    private func beginCreationDrag(at location: CGPoint) {
+        window?.makeFirstResponder(self)
+        guard let imagePoint = imagePoint(for: location) else { return }
+
+        switch creationShapeKind {
+        case .polygon:
+            // 첫 드래그는 시작점을 만들고, 이후 드래그는 마지막 점에서 새 끝점으로 이어진다.
+            if polygonCreationPoints.isEmpty {
+                polygonCreationPoints = [imagePoint]
+            }
+            creationDragStartPoint = polygonCreationPoints.last
+            creationDragCurrentPoint = imagePoint
+            isCloseToFirstCreationPoint = false
+        case .rectangle:
+            creationDragStartPoint = imagePoint
+            creationDragCurrentPoint = imagePoint
+            isCloseToFirstCreationPoint = false
+        }
+
+        NSCursor.crosshair.set()
+        needsDisplay = true
+    }
+
+    private func updateCreationDrag(at location: CGPoint) {
+        guard let imagePoint = imagePoint(for: location) else { return }
+
+        creationDragCurrentPoint = imagePoint
+        if creationShapeKind == .polygon {
+            // 첫 점 근처로 오면 mouseUp에서 polygon을 닫을 수 있도록 표시한다.
+            isCloseToFirstCreationPoint = isNearFirstCreationPoint(location)
+        }
+
+        NSCursor.crosshair.set()
+        needsDisplay = true
+    }
+
+    private func finishCreationDrag(at location: CGPoint) {
+        switch creationShapeKind {
+        case .polygon:
+            finishPolygonCreationDrag(at: location)
+        case .rectangle:
+            finishRectangleCreationDrag(at: location)
+        }
+
+        NSCursor.crosshair.set()
+    }
+
+    private func finishPolygonCreationDrag(at location: CGPoint) {
+        defer {
+            creationDragStartPoint = nil
+            creationDragCurrentPoint = nil
+            isCloseToFirstCreationPoint = false
             needsDisplay = true
         }
 
-        if newHoveredShapeIndex == nil {
-            NSCursor.arrow.set()
-        } else {
-            NSCursor.openHand.set()
+        guard !polygonCreationPoints.isEmpty else { return }
+
+        if polygonCreationPoints.count >= 3, isNearFirstCreationPoint(location) {
+            // 세 점 이상 찍은 뒤 첫 점에서 놓으면 label 입력 후 polygon을 확정한다.
+            commitCreatedShape(
+                points: polygonCreationPoints.map { LabelMeAnnotation.Point(x: $0.x, y: $0.y) },
+                shapeType: "polygon"
+            )
+            return
         }
+
+        guard let imagePoint = imagePoint(for: location),
+              let lastPoint = polygonCreationPoints.last,
+              creationSegmentLength(from: lastPoint, to: imagePoint) >= CreationStyle.minimumSegmentLength else {
+            return
+        }
+
+        // 아직 닫히지 않았다면 현재 드래그 끝점을 다음 꼭지점으로 추가한다.
+        polygonCreationPoints.append(imagePoint)
+    }
+
+    private func finishRectangleCreationDrag(at location: CGPoint) {
+        defer {
+            creationDragStartPoint = nil
+            creationDragCurrentPoint = nil
+            needsDisplay = true
+        }
+
+        guard let startPoint = creationDragStartPoint,
+              let endPoint = imagePoint(for: location),
+              let rect = rectangleBounds(for: [startPoint, endPoint]) else {
+            return
+        }
+
+        let topLeft = CGPoint(x: rect.minX, y: rect.minY)
+        let bottomRight = CGPoint(x: rect.maxX, y: rect.maxY)
+        // 너무 작은 rectangle은 실수 드래그로 보고 생성하지 않는다.
+        guard creationSegmentLength(from: topLeft, to: CGPoint(x: rect.maxX, y: rect.minY)) >= CreationStyle.minimumRectangleSide,
+              creationSegmentLength(from: topLeft, to: CGPoint(x: rect.minX, y: rect.maxY)) >= CreationStyle.minimumRectangleSide else {
+            return
+        }
+
+        commitCreatedShape(
+            points: [
+                LabelMeAnnotation.Point(x: topLeft.x, y: topLeft.y),
+                LabelMeAnnotation.Point(x: bottomRight.x, y: bottomRight.y)
+            ],
+            shapeType: "rectangle"
+        )
+    }
+
+    private func commitCreatedShape(points: [LabelMeAnnotation.Point], shapeType: String) {
+        guard var annotation = annotation else { return }
+        let existingLabels = annotation.shapes.map { $0.label }
+        // OK로 label이 확정된 경우에만 annotation에 새 shape를 추가한다.
+        guard let label = onLabelRequested?(existingLabels)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !label.isEmpty else {
+            cancelCreation()
+            return
+        }
+
+        annotation.shapes.append(LabelMeAnnotation.Shape(label: label, points: points, shapeType: shapeType))
+        self.annotation = annotation
+        visibleShapeIndexes.insert(annotation.shapes.count - 1)
+        onAnnotationChanged?(annotation)
+        cancelCreation()
+    }
+
+    private func cancelCreation() {
+        // Esc, Cancel, 모드 전환 때 화면에만 있던 임시 생성 상태를 버린다.
+        polygonCreationPoints = []
+        creationDragStartPoint = nil
+        creationDragCurrentPoint = nil
+        isCloseToFirstCreationPoint = false
+        needsDisplay = true
+    }
+
+    private func setCreationShapeKind(_ shapeKind: CreationShapeKind) {
+        guard creationShapeKind != shapeKind else { return }
+        // 생성 타입을 바꿀 때는 이전에 그리던 미완성 도형을 이어가지 않는다.
+        creationShapeKind = shapeKind
+        cancelCreation()
+        NSCursor.crosshair.set()
+    }
+
+    private func isNearFirstCreationPoint(_ location: CGPoint) -> Bool {
+        guard polygonCreationPoints.count >= 3,
+              let firstPoint = polygonCreationPoints.first,
+              let annotation = annotation,
+              annotation.imageSize.width > 0,
+              annotation.imageSize.height > 0 else {
+            return false
+        }
+
+        let imageRect = fittedImageRect(for: annotation.imageSize)
+        let firstViewPoint = viewPoint(for: firstPoint, imageRect: imageRect, imageSize: annotation.imageSize)
+        // 화면상 첫 점 주변의 hit 영역으로 닫힘 여부를 판단한다.
+        return distance(from: location, to: firstViewPoint) <= CreationStyle.closeHitDiameter / 2
+    }
+
+    private func creationSegmentLength(from startPoint: CGPoint, to endPoint: CGPoint) -> CGFloat {
+        guard let annotation = annotation,
+              annotation.imageSize.width > 0,
+              annotation.imageSize.height > 0 else {
+            return 0
+        }
+
+        let imageRect = fittedImageRect(for: annotation.imageSize)
+        let startViewPoint = viewPoint(for: startPoint, imageRect: imageRect, imageSize: annotation.imageSize)
+        let endViewPoint = viewPoint(for: endPoint, imageRect: imageRect, imageSize: annotation.imageSize)
+        return distance(from: startViewPoint, to: endViewPoint)
+    }
+
+    private func distance(from firstPoint: CGPoint, to secondPoint: CGPoint) -> CGFloat {
+        let deltaX = firstPoint.x - secondPoint.x
+        let deltaY = firstPoint.y - secondPoint.y
+        return sqrt(deltaX * deltaX + deltaY * deltaY)
+    }
+
+    private func updateCursor(at location: CGPoint) {
+        switch interactionMode {
+        case .inactive:
+            NSCursor.arrow.set()
+        case .create:
+            NSCursor.crosshair.set()
+        case .edit:
+            let newHoveredVertex = vertexSelection(at: location)
+            let newHoveredShapeIndex = newHoveredVertex?.shapeIndex ?? shapeIndex(at: location)
+            if newHoveredVertex != hoveredVertex || newHoveredShapeIndex != hoveredShapeIndex {
+                hoveredVertex = newHoveredVertex
+                hoveredShapeIndex = newHoveredShapeIndex
+                needsDisplay = true
+            }
+
+            if newHoveredVertex == nil {
+                NSCursor.arrow.set()
+            } else {
+                NSCursor.pointingHand.set()
+            }
+        }
+    }
+
+    private func vertexSelection(at location: CGPoint) -> VertexSelection? {
+        guard interactionMode == .edit,
+              let annotation = annotation,
+              annotation.imageSize.width > 0,
+              annotation.imageSize.height > 0 else {
+            return nil
+        }
+
+        let imageRect = fittedImageRect(for: annotation.imageSize)
+        guard imageRect.width > 0, imageRect.height > 0 else { return nil }
+
+        for shapeIndex in annotation.shapes.indices.reversed() {
+            guard visibleShapeIndexes.contains(shapeIndex) else { continue }
+
+            let handles = handleViewPoints(
+                for: annotation.shapes[shapeIndex],
+                imageRect: imageRect,
+                imageSize: annotation.imageSize
+            )
+            for vertexIndex in handles.indices.reversed() {
+                let point = handles[vertexIndex]
+                let hitRect = CGRect(
+                    x: point.x - HandleStyle.hitDiameter / 2,
+                    y: point.y - HandleStyle.hitDiameter / 2,
+                    width: HandleStyle.hitDiameter,
+                    height: HandleStyle.hitDiameter
+                )
+                if hitRect.contains(location) {
+                    return VertexSelection(shapeIndex: shapeIndex, vertexIndex: vertexIndex)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private func handleViewPoints(
+        for shape: LabelMeAnnotation.Shape,
+        imageRect: CGRect,
+        imageSize: NSSize
+    ) -> [CGPoint] {
+        return handleImagePoints(for: shape).map {
+            viewPoint(for: $0, imageRect: imageRect, imageSize: imageSize)
+        }
+    }
+
+    private func handleImagePoints(for shape: LabelMeAnnotation.Shape) -> [CGPoint] {
+        if isRectangle(shape), let rect = rectangleBounds(for: shape.points.map({ CGPoint(x: $0.x, y: $0.y) })) {
+            return [
+                CGPoint(x: rect.minX, y: rect.minY),
+                CGPoint(x: rect.maxX, y: rect.minY),
+                CGPoint(x: rect.maxX, y: rect.maxY),
+                CGPoint(x: rect.minX, y: rect.maxY)
+            ]
+        }
+
+        return shape.points.map { CGPoint(x: $0.x, y: $0.y) }
+    }
+
+    private func viewPoint(for imagePoint: CGPoint, imageRect: CGRect, imageSize: NSSize) -> CGPoint {
+        return CGPoint(
+            x: imageRect.minX + imagePoint.x * imageRect.width / imageSize.width,
+            y: imageRect.minY + imagePoint.y * imageRect.height / imageSize.height
+        )
+    }
+
+    private func updateRectangleCorner(
+        in shape: inout LabelMeAnnotation.Shape,
+        vertexIndex: Int,
+        to point: CGPoint
+    ) {
+        guard let currentRect = rectangleBounds(for: shape.points.map({ CGPoint(x: $0.x, y: $0.y) })) else {
+            return
+        }
+
+        let fixedPoint: CGPoint
+        switch vertexIndex {
+        case 0:
+            fixedPoint = CGPoint(x: currentRect.maxX, y: currentRect.maxY)
+        case 1:
+            fixedPoint = CGPoint(x: currentRect.minX, y: currentRect.maxY)
+        case 2:
+            fixedPoint = CGPoint(x: currentRect.minX, y: currentRect.minY)
+        case 3:
+            fixedPoint = CGPoint(x: currentRect.maxX, y: currentRect.minY)
+        default:
+            return
+        }
+
+        shape.points = [
+            LabelMeAnnotation.Point(x: min(point.x, fixedPoint.x), y: min(point.y, fixedPoint.y)),
+            LabelMeAnnotation.Point(x: max(point.x, fixedPoint.x), y: max(point.y, fixedPoint.y))
+        ]
+    }
+
+    private func isRectangle(_ shape: LabelMeAnnotation.Shape) -> Bool {
+        return shape.shapeType?.lowercased() == "rectangle"
+    }
+
+    private func rectangleBounds(for points: [CGPoint]) -> CGRect? {
+        guard let firstPoint = points.first else { return nil }
+
+        var minX = firstPoint.x
+        var maxX = firstPoint.x
+        var minY = firstPoint.y
+        var maxY = firstPoint.y
+
+        for point in points.dropFirst() {
+            minX = min(minX, point.x)
+            maxX = max(maxX, point.x)
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+
+        guard maxX > minX, maxY > minY else { return nil }
+
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    private func rectangleBounds(for points: [LabelMeAnnotation.Point]) -> CGRect? {
+        return rectangleBounds(for: points.map { CGPoint(x: $0.x, y: $0.y) })
     }
 
     private func shapeIndex(at location: CGPoint) -> Int? {
@@ -576,15 +1380,7 @@ private final class AnnotationOverlayView: NSView {
     }
 
     private func contains(_ point: CGPoint, in shape: LabelMeAnnotation.Shape) -> Bool {
-        if shape.shapeType == "rectangle", shape.points.count >= 2 {
-            let firstPoint = shape.points[0]
-            let secondPoint = shape.points[1]
-            let rect = CGRect(
-                x: min(firstPoint.x, secondPoint.x),
-                y: min(firstPoint.y, secondPoint.y),
-                width: abs(secondPoint.x - firstPoint.x),
-                height: abs(secondPoint.y - firstPoint.y)
-            )
+        if isRectangle(shape), let rect = rectangleBounds(for: shape.points) {
             return rect.contains(point)
         }
 
