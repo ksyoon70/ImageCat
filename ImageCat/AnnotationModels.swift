@@ -67,6 +67,17 @@ struct PolygonLabelRow {
     var isVisible: Bool = true
 }
 
+// 폴더 전체 JSON에서 수집한 label과 palette index의 쌍이다.
+// NSColor 자체보다 index를 저장해야 Set/Hashable로 안정적으로 다룰 수 있다.
+struct LabelColorPair: Hashable {
+    let label: String
+    let colorIndex: Int
+
+    var color: NSColor {
+        return LabelColorProvider.color(at: colorIndex)
+    }
+}
+
 enum LabelColorProvider {
     private static let palette: [NSColor] = [
         .systemGreen,
@@ -79,11 +90,47 @@ enum LabelColorProvider {
         .systemYellow
     ]
 
-    static func colors(for labels: [String]) -> [String: NSColor] {
-        let uniqueLabels = Array(Set(labels)).sorted()
+    static func color(at index: Int) -> NSColor {
+        return palette[index % palette.count]
+    }
 
-        return Dictionary(uniqueKeysWithValues: uniqueLabels.enumerated().map { index, label in
-            (label, palette[index % palette.count])
+    // 폴더 단위로 같은 label은 항상 같은 색을 쓰도록 정렬된 label 목록에서 pair set을 만든다.
+    static func colorPairs(for labels: [String]) -> Set<LabelColorPair> {
+        let uniqueLabels = Array(Set(labels)).sorted()
+        return Set(uniqueLabels.enumerated().map { index, label in
+            LabelColorPair(label: label, colorIndex: index % palette.count)
+        })
+    }
+
+    static func extending(
+        _ pairs: Set<LabelColorPair>,
+        with labels: [String]
+    ) -> Set<LabelColorPair> {
+        let existingLabels = Set(pairs.map { $0.label })
+        let combinedLabels = Array(existingLabels.union(labels)).sorted()
+        var extendedPairs = pairs
+
+        for label in labels where !existingLabels.contains(label) {
+            guard let index = combinedLabels.firstIndex(of: label) else { continue }
+            extendedPairs.insert(LabelColorPair(label: label, colorIndex: index % palette.count))
+        }
+
+        return extendedPairs
+    }
+
+    // 폴더에서 미리 계산한 색상 pair를 우선하고, 새 label은 같은 정렬 규칙으로 보충한다.
+    static func colors(
+        for labels: [String],
+        preferredPairs: Set<LabelColorPair> = []
+    ) -> [String: NSColor] {
+        let uniqueLabels = Array(Set(labels)).sorted()
+        let preferredLabels = Set(preferredPairs.map { $0.label })
+        let combinedLabels = Array(preferredLabels.union(uniqueLabels)).sorted()
+        let fallbackPairs = colorPairs(for: combinedLabels)
+        let mergedPairs = fallbackPairs.filter { !preferredLabels.contains($0.label) }.union(preferredPairs)
+
+        return Dictionary(uniqueKeysWithValues: mergedPairs.map { pair in
+            (pair.label, pair.color)
         })
     }
 }

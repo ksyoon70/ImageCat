@@ -29,6 +29,10 @@ class ImageControlViewController: NSViewController{
     @IBOutlet weak var polygonLabelsTableView: NSTableView!
     
     private var polygonLabelRows: [PolygonLabelRow] = []
+    // 폴더 label-color scan 결과가 나중에 도착해도 현재 annotation 목록을 다시 색칠할 수 있게 보관한다.
+    private var currentAnnotation: LabelMeAnnotation?
+    // 폴더 전체에서 계산한 label-color set이다. 오른쪽 목록과 overlay가 같은 색 기준을 공유한다.
+    private var folderLabelColorPairs: Set<LabelColorPair> = []
 
     private var didSetInitialControlSplitPositions = false
     
@@ -89,7 +93,22 @@ class ImageControlViewController: NSViewController{
     }
     
     func updatePolygonLabels(from annotation: LabelMeAnnotation?) {
-        guard let annotation else {
+        currentAnnotation = annotation
+        rebuildPolygonLabelRows(preservingVisibility: false)
+    }
+
+    func setFolderLabelColorPairs(_ pairs: Set<LabelColorPair>) {
+        folderLabelColorPairs = pairs
+        // 색상 scan 결과만 바뀐 경우에는 사용자가 꺼둔 checkbox 상태를 유지한다.
+        rebuildPolygonLabelRows(preservingVisibility: true)
+    }
+
+    private func rebuildPolygonLabelRows(preservingVisibility: Bool) {
+        let previousVisibility = Dictionary(
+            uniqueKeysWithValues: polygonLabelRows.map { ($0.shapeIndex, $0.isVisible) }
+        )
+
+        guard let annotation = currentAnnotation else {
             polygonLabelRows = []
             applyPolygonVisibilityToPreview()
             reloadPolygonLabelsTableIfLoaded()
@@ -97,14 +116,14 @@ class ImageControlViewController: NSViewController{
         }
 
         let labels = annotation.shapes.map { $0.label }
-        let colors = LabelColorProvider.colors(for: labels)
+        let colors = LabelColorProvider.colors(for: labels, preferredPairs: folderLabelColorPairs)
 
         polygonLabelRows = annotation.shapes.enumerated().map { index, shape in
             PolygonLabelRow(
                 shapeIndex: index,
                 label: shape.label,
                 color: colors[shape.label] ?? .systemBlue,
-                isVisible: true
+                isVisible: preservingVisibility ? previousVisibility[index] ?? true : true
             )
         }
 

@@ -30,7 +30,18 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
         didSet {
             currentFolderURL = folderURL
             imagePreviewViewController?.imageURL = nil
+            // 폴더가 바뀌면 현재 이미지보다 먼저 폴더 전체 label-color set을 준비한다.
+            scheduleFolderLabelColorScan(for: folderURL)
             reloadFiles()
+        }
+    }
+
+    // 폴더 label scan은 label만 필요하므로 전체 annotation 모델보다 가벼운 구조로 디코딩한다.
+    private struct FolderAnnotationLabels: Decodable {
+        let shapes: [Shape]
+
+        struct Shape: Decodable {
+            let label: String?
         }
     }
 
@@ -47,12 +58,19 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
         formatter.countStyle = .file
         return formatter
     }()
+    // 많은 JSON을 읽어도 UI 스크롤/선택이 멈추지 않도록 백그라운드 queue에서 scan한다.
+    private let folderLabelScanQueue = DispatchQueue(label: "ImageCat.folderLabelScanQueue", qos: .userInitiated)
+    // 폴더를 빠르게 바꿀 때 오래된 scan 결과가 최신 화면에 덮어쓰이지 않게 세대값을 쓴다.
+    private var folderLabelScanGeneration = 0
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
         configureView()
         reloadFiles()
+        if currentFolderURL != nil {
+            scheduleFolderLabelColorScan(for: currentFolderURL)
+        }
     }
 
     override var representedObject: Any? {
@@ -310,7 +328,86 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     private func navigate(to folderURL: URL) {
         currentFolderURL = folderURL
         imagePreviewViewController?.imageURL = nil
+        // 사이드바/더블클릭 이동도 Open Dir와 같은 색상 scan 경로를 타게 한다.
+        scheduleFolderLabelColorScan(for: folderURL)
         reloadFiles()
+    }
+
+    private func scheduleFolderLabelColorScan(for folderURL: URL?) {
+        // 새 scan 요청마다 세대값을 올린다. 이전 폴더 scan이 늦게 끝나도 최신 결과를 덮어쓰지 못하게 한다.
+        folderLabelScanGeneration += 1
+        let generation = folderLabelScanGeneration
+
+        guard let folderURL else {
+            // 선택된 폴더가 없으면 overlay와 오른쪽 목록의 폴더 기준 색상 set도 비운다.
+            applyFolderLabelColorPairs([])
+            return
+        }
+
+        // 같은 폴더라도 상대 경로/심볼릭 경로 차이로 비교가 어긋나지 않도록 표준화된 URL로 맞춘다.
+        let standardizedFolderURL = folderURL.standardizedFileURL
+        // 새 폴더 scan이 끝나기 전까지 이전 폴더의 label-color set이 보이지 않도록 먼저 초기화한다.
+        applyFolderLabelColorPairs([])
+
+        folderLabelScanQueue.async { [weak self] in
+            // 디스크 I/O와 JSON parsing은 백그라운드에서 끝내고 UI 반영만 main queue에서 한다.
+            let pairs = Self.buildFolderLabelColorPairs(for: standardizedFolderURL)
+
+            DispatchQueue.main.async {
+                // scan 도중 다른 폴더로 이동했다면 generation 또는 currentFolderURL 검증에서 걸러진다.
+                guard let self = self,
+                      generation == self.folderLabelScanGeneration,
+                      self.currentFolderURL?.standardizedFileURL == standardizedFolderURL else {
+                    return
+                }
+
+                // 여기까지 온 결과만 현재 폴더의 최신 label-color set으로 인정해 UI에 반영한다.
+                self.applyFolderLabelColorPairs(pairs)
+            }
+        }
+    }
+
+    private func applyFolderLabelColorPairs(_ pairs: Set<LabelColorPair>) {
+        // overlay와 오른쪽 label 목록이 같은 palette 기준을 공유해야 색상이 흔들리지 않는다.
+        imagePreviewViewController?.setFolderLabelColorPairs(pairs)
+        imageControlViewController?.setFolderLabelColorPairs(pairs)
+    }
+
+    private static func buildFolderLabelColorPairs(for folderURL: URL) -> Set<LabelColorPair> {
+        let fileManager = FileManager.default
+        let jsonURLs: [URL]
+
+        do {
+            jsonURLs = try fileManager.contentsOfDirectory(
+                at: folderURL,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            )
+            .filter { $0.pathExtension.lowercased() == "json" }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        } catch {
+            print("폴더 JSON 목록 읽기 실패: \(folderURL.path) - \(error.localizedDescription)")
+            return []
+        }
+
+        let decoder = JSONDecoder()
+        var labels: [String] = []
+
+        // 깨진 JSON 하나가 있어도 나머지 label scan은 계속 진행한다.
+        for jsonURL in jsonURLs {
+            do {
+                let data = try Data(contentsOf: jsonURL)
+                let annotationLabels = try decoder.decode(FolderAnnotationLabels.self, from: data)
+                labels.append(contentsOf: annotationLabels.shapes.compactMap { shape in
+                    let label = shape.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    return label.isEmpty ? nil : label
+                })
+            } catch {
+                print("폴더 label scan 실패: \(jsonURL.path) - \(error.localizedDescription)")
+            }
+        }
+
+        return LabelColorProvider.colorPairs(for: labels)
     }
 
     private func updateCurrentFolderUI() {
@@ -321,6 +418,12 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     private var imagePreviewViewController: ImagePreviewViewController? {
         return (parent as? NSSplitViewController)?.splitViewItems
             .compactMap { $0.viewController as? ImagePreviewViewController }
+            .first
+    }
+
+    private var imageControlViewController: ImageControlViewController? {
+        return (parent as? NSSplitViewController)?.splitViewItems
+            .compactMap { $0.viewController as? ImageControlViewController }
             .first
     }
 
