@@ -166,6 +166,12 @@ class ImagePreviewViewController: NSViewController {
         annotationOverlayView.interactionMode = mode
     }
 
+    @discardableResult
+    func deleteSelectedAnnotationShape() -> Bool {
+        // 오늘 수정: WindowController가 private overlay에 직접 접근하지 않도록 공개 wrapper를 둔다.
+        return annotationOverlayView.deleteSelectedShape()
+    }
+
     func saveCurrentAnnotation() throws {
         guard let imageURL else {
             throw AnnotationSaveError.missingImage
@@ -581,6 +587,10 @@ private final class AnnotationOverlayView: NSView {
             if let lastCreatedLabel = lastCreatedLabel, !labels.contains(lastCreatedLabel) {
                 self.lastCreatedLabel = nil
             }
+            // 오늘 수정: 삭제/교체 후 선택 index가 annotation 범위를 벗어나면 선택을 해제한다.
+            if let selectedShapeIndex, annotation?.shapes.indices.contains(selectedShapeIndex) != true {
+                self.selectedShapeIndex = nil
+            }
             if oldValue?.shapes.count != annotation?.shapes.count {
                 let newIndexes = Set(annotation?.shapes.indices ?? 0..<0)
                 if oldValue == nil || visibleShapeIndexes.isEmpty {
@@ -614,6 +624,8 @@ private final class AnnotationOverlayView: NSView {
 
     private var labelColors: [String: NSColor] = [:]
     private var trackingArea: NSTrackingArea?
+    // 오늘 수정: toolbar 버튼을 누르러 마우스가 떠나도 edit 선택 shape를 유지하기 위한 상태다.
+    private var selectedShapeIndex: Int?
     private var hoveredShapeIndex: Int?
     private var hoveredVertex: VertexSelection?
     private var draggingVertex: VertexSelection?
@@ -634,6 +646,8 @@ private final class AnnotationOverlayView: NSView {
         didSet {
             guard oldValue != interactionMode else { return }
             // 모드가 바뀌면 선택 핸들과 작성 중인 임시 도형을 모두 정리한다.
+            // 오늘 수정: edit 선택은 모드가 바뀌면 더 이상 유효하지 않으므로 함께 초기화한다.
+            selectedShapeIndex = nil
             hoveredShapeIndex = nil
             hoveredVertex = nil
             draggingVertex = nil
@@ -750,6 +764,8 @@ private final class AnnotationOverlayView: NSView {
         shapeDragLastImagePoint = draggingShapeIndex == nil ? nil : imagePoint(for: location)
         hoveredVertex = selectedVertex
         hoveredShapeIndex = selectedShapeIndex
+        // 오늘 수정: 클릭한 shape를 hover와 별도로 저장해서 Delete Polygons 버튼이 사용할 수 있게 한다.
+        self.selectedShapeIndex = selectedShapeIndex
 
         if selectedVertex != nil {
             NSCursor.pointingHand.set()
@@ -868,6 +884,40 @@ private final class AnnotationOverlayView: NSView {
         super.keyDown(with: event)
     }
 
+    @discardableResult
+    func deleteSelectedShape() -> Bool {
+        // 오늘 수정: edit 모드에서 선택된 shape만 삭제하고, 선택이 없으면 아무 작업도 하지 않는다.
+        guard interactionMode == .edit,
+              let selectedShapeIndex,
+              var annotation = annotation,
+              annotation.shapes.indices.contains(selectedShapeIndex) else {
+            return false
+        }
+
+        let oldVisibleShapeIndexes = visibleShapeIndexes
+        annotation.shapes.remove(at: selectedShapeIndex)
+
+        // 오늘 수정: 삭제된 shape와 관련된 hover/drag/selection 상태를 모두 비운다.
+        self.selectedShapeIndex = nil
+        hoveredShapeIndex = nil
+        hoveredVertex = nil
+        draggingVertex = nil
+        draggingShapeIndex = nil
+        shapeDragLastImagePoint = nil
+        self.annotation = annotation
+        // 오늘 수정: 삭제 뒤 뒤쪽 shape index가 하나씩 당겨지므로 visible index도 같이 보정한다.
+        visibleShapeIndexes = Set(oldVisibleShapeIndexes.compactMap { index in
+            if index == selectedShapeIndex {
+                return nil
+            }
+            return index > selectedShapeIndex ? index - 1 : index
+        })
+        onAnnotationChanged?(annotation)
+        NSCursor.arrow.set()
+        needsDisplay = true
+        return true
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard interactionMode == .create,
               event.modifierFlags.contains(.command),
@@ -916,6 +966,8 @@ private final class AnnotationOverlayView: NSView {
             let activeVertex = draggingVertex ?? hoveredVertex
             let isActiveShape = isEditingEnabled &&
                 (
+                    // 오늘 수정: toolbar 삭제 대상인 선택 shape도 hover shape처럼 강조해서 표시한다.
+                    shapeIndex == selectedShapeIndex ||
                     shapeIndex == hoveredShapeIndex ||
                     shapeIndex == draggingVertex?.shapeIndex ||
                     shapeIndex == draggingShapeIndex

@@ -693,44 +693,51 @@
                         <rect key="screenRect" x="0.0" y="0.0" width="1680" height="1027"/>
                         <toolbar key="toolbar" implicitIdentifier="533F859B-6820-4210-B435-A41188C60B22" autosavesConfiguration="NO" showsBaselineSeparator="NO" displayMode="iconAndLabel" sizeMode="regular" id="ZCO-fJ-ZJL">
                             <allowedToolbarItems>
-                                <toolbarItem implicitItemIdentifier="C306CA28-D228-47F6-A1EF-E604687BFC80" label="Open Dir" paletteLabel="Open Dir" tag="-1" image="folder" catalog="system" bordered="YES" id="1da-rx-DCT">
+                                <toolbarItem implicitItemIdentifier="C306CA28-D228-47F6-A1EF-E604687BFC80" label="Open Dir" paletteLabel="Open Dir" toolTip="폴더를 엽니다" tag="-1" image="folder" catalog="system" bordered="YES" id="1da-rx-DCT">
                                     <size key="minSize" width="30" height="25"/>
                                     <size key="maxSize" width="30" height="25"/>
                                     <connections>
                                         <action selector="openDirectory:" target="jGA-0Y-lOj" id="zF7-1h-fF8"/>
                                     </connections>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="DED72502-291F-491A-9BF6-3CECFBEAE97A" label="Next Image" paletteLabel="Next Image" tag="-1" image="arrowshape.right" catalog="system" bordered="YES" id="fqG-YZ-hkc">
+                                <toolbarItem implicitItemIdentifier="DED72502-291F-491A-9BF6-3CECFBEAE97A" label="Next Image" paletteLabel="Next Image" toolTip="다음 이미지" tag="-1" image="arrowshape.right" catalog="system" bordered="YES" id="fqG-YZ-hkc">
                                     <size key="minSize" width="29" height="25"/>
                                     <size key="maxSize" width="29" height="25"/>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="952A0790-6490-4846-833E-0869D8521B01" label="Prev Image" paletteLabel="Prev Image" tag="-1" image="arrowshape.left" catalog="system" bordered="YES" id="IrD-rJ-EEB">
+                                <toolbarItem implicitItemIdentifier="952A0790-6490-4846-833E-0869D8521B01" label="Prev Image" paletteLabel="Prev Image" toolTip="이전 이미지" tag="-1" image="arrowshape.left" catalog="system" bordered="YES" id="IrD-rJ-EEB">
                                     <size key="minSize" width="29" height="25"/>
                                     <size key="maxSize" width="29" height="25"/>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="4241A725-9475-42CC-979E-D11F57CF4AFC" label="Save" paletteLabel="Save" tag="-1" image="square.and.arrow.down" catalog="system" bordered="YES" id="6vG-98-JZD">
+                                <toolbarItem implicitItemIdentifier="4241A725-9475-42CC-979E-D11F57CF4AFC" label="Save" paletteLabel="Save" toolTip="이미지 저장" tag="-1" image="square.and.arrow.down" catalog="system" bordered="YES" id="6vG-98-JZD">
                                     <size key="minSize" width="27" height="25"/>
                                     <size key="maxSize" width="27" height="25"/>
                                     <connections>
                                         <action selector="saveAnnotation:" target="jGA-0Y-lOj" id="RVh-tp-Nx9"/>
                                     </connections>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="03A3D7EA-0734-403A-A994-52E0BCD48B9A" label="Delete File" paletteLabel="Delete File" tag="-1" image="trash" catalog="system" bordered="YES" id="jo4-fC-hxd">
+                                <toolbarItem implicitItemIdentifier="03A3D7EA-0734-403A-A994-52E0BCD48B9A" label="Delete File" paletteLabel="Delete File" toolTip="json 삭제" tag="-1" image="trash" catalog="system" bordered="YES" id="jo4-fC-hxd">
                                     <size key="minSize" width="27" height="25"/>
                                     <size key="maxSize" width="27" height="25"/>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="8C0955AF-A223-407D-814A-8085C0B47E18" label="Create Polygons" paletteLabel="Create Polygons" tag="-1" image="plus.viewfinder" catalog="system" bordered="YES" id="RE2-pX-4d3">
+                                <toolbarItem implicitItemIdentifier="8C0955AF-A223-407D-814A-8085C0B47E18" label="Create Polygons" paletteLabel="Create Polygons" toolTip="Polygons 생성" tag="-1" image="plus.viewfinder" catalog="system" bordered="YES" id="RE2-pX-4d3">
                                     <size key="minSize" width="28" height="25"/>
                                     <size key="maxSize" width="28" height="25"/>
                                     <connections>
                                         <action selector="toggleCreatePolygons:" target="jGA-0Y-lOj" id="kBK-pw-xE5"/>
                                     </connections>
                                 </toolbarItem>
-                                <toolbarItem implicitItemIdentifier="A544BA38-8B74-4079-B762-5DC9EDAA0272" label="Edit Polygons" paletteLabel="Edit Polygons" tag="-1" image="pencil" catalog="system" bordered="YES" id="wvj-33-Gcs">
+                                <toolbarItem implicitItemIdentifier="A544BA38-8B74-4079-B762-5DC9EDAA0272" label="Edit Polygons" paletteLabel="Edit Polygons" toolTip="Polygons을 편집합니다" tag="-1" image="pencil" catalog="system" bordered="YES" id="wvj-33-Gcs">
                                     <size key="minSize" width="26" height="25"/>
                                     <size key="maxSize" width="26" height="25"/>
                                     <connections>
                                         <action selector="toggleEditPolygons:" target="jGA-0Y-lOj" id="eGn-GY-pwR"/>
+                                    </connections>
+                                </toolbarItem>
+                                <toolbarItem implicitItemIdentifier="077C949E-9D9A-47A1-ABBB-EAB7022245E8" label="Delete Polygons" paletteLabel="Delete Polygons" toolTip="Polygons를 삭제합니다" tag="-1" image="xmark.circle" catalog="system" bordered="YES" id="XFC-Ow-NpI" userLabel="Delete Polygons">
+                                    <size key="minSize" width="27" height="25"/>
+                                    <size key="maxSize" width="27" height="25"/>
+                                    <connections>
+                                        <action selector="deletePolygons:" target="jGA-0Y-lOj" id="On6-3k-00t"/>
                                     </connections>
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="NSToolbarShowColorsItem" id="smZ-Bs-KXI"/>
@@ -747,6 +754,7 @@
                                 <toolbarItem reference="jo4-fC-hxd"/>
                                 <toolbarItem reference="RE2-pX-4d3"/>
                                 <toolbarItem reference="wvj-33-Gcs"/>
+                                <toolbarItem reference="XFC-Ow-NpI"/>
                             </defaultToolbarItems>
                         </toolbar>
                         <connections>
@@ -821,7 +829,7 @@
                                             <visualEffectView blendingMode="behindWindow" material="appearanceBased" state="followsWindowActiveState" translatesAutoresizingMaskIntoConstraints="NO" id="IKf-Tg-3aT">
                                                 <rect key="frame" x="0.0" y="163" width="288" height="22"/>
                                                 <subviews>
-                                                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Ph5-ep-Meg">
+                                                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Ph5-ep-Meg">
                                                         <rect key="frame" x="3" y="3" width="63" height="16"/>
                                                         <textFieldCell key="cell" lineBreakMode="clipping" alignment="left" title="Label List" id="l9Z-8H-Xd3">
                                                             <font key="font" usesAppearanceFont="YES"/>
@@ -849,7 +857,7 @@
                                                             <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
                                                             <color key="gridColor" name="separatorColor" catalog="System" colorSpace="catalog"/>
                                                             <tableColumns>
-                                                                <tableColumn identifier="AutomaticTableColumnIdentifier.0" width="116" minWidth="40" maxWidth="1000" id="Uq0-1u-5sl">
+                                                                <tableColumn identifier="LabelListLabelColumn" width="116" minWidth="40" maxWidth="1000" id="Uq0-1u-5sl">
                                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border">
                                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                                         <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
@@ -861,11 +869,11 @@
                                                                     </textFieldCell>
                                                                     <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
                                                                     <prototypeCellViews>
-                                                                        <tableCellView id="CYj-Bk-x8Q">
+                                                                        <tableCellView identifier="LabelCell" id="CYj-Bk-x8Q">
                                                                             <rect key="frame" x="8" y="0.0" width="114" height="17"/>
                                                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                                             <subviews>
-                                                                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="cEa-se-t0h">
+                                                                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="cEa-se-t0h">
                                                                                     <rect key="frame" x="0.0" y="1" width="114" height="16"/>
                                                                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES" flexibleMaxY="YES"/>
                                                                                     <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Table View Cell" id="AzZ-mQ-hm7">
@@ -881,7 +889,7 @@
                                                                         </tableCellView>
                                                                     </prototypeCellViews>
                                                                 </tableColumn>
-                                                                <tableColumn identifier="AutomaticTableColumnIdentifier.1" width="141" minWidth="40" maxWidth="1000" id="rAn-cI-eoH">
+                                                                <tableColumn identifier="LabelListColorColumn" width="141" minWidth="40" maxWidth="1000" id="rAn-cI-eoH">
                                                                     <tableHeaderCell key="headerCell" lineBreakMode="truncatingTail" borderStyle="border">
                                                                         <color key="textColor" name="headerTextColor" catalog="System" colorSpace="catalog"/>
                                                                         <color key="backgroundColor" name="headerColor" catalog="System" colorSpace="catalog"/>
@@ -893,15 +901,25 @@
                                                                     </textFieldCell>
                                                                     <tableColumnResizingMask key="resizingMask" resizeWithTable="YES" userResizable="YES"/>
                                                                     <prototypeCellViews>
-                                                                        <tableCellView id="Gyc-aC-AZa">
+                                                                        <tableCellView identifier="ColorCell" id="Gyc-aC-AZa" customClass="LabelListColorCellView" customModule="ImageCat" customModuleProvider="target">
                                                                             <rect key="frame" x="139" y="0.0" width="138" height="24"/>
                                                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                                             <subviews>
-                                                                                <customView fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="hOO-mb-uBC">
-                                                                                    <rect key="frame" x="-13" y="-36" width="163" height="96"/>
-                                                                                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                                                                                <customView translatesAutoresizingMaskIntoConstraints="NO" id="hOO-mb-uBC" customClass="ColorDotView" customModule="ImageCat" customModuleProvider="target">
+                                                                                    <rect key="frame" x="63" y="6" width="12" height="12"/>
+                                                                                    <constraints>
+                                                                                        <constraint firstAttribute="width" constant="12" id="8Cs-zN-kW8"/>
+                                                                                        <constraint firstAttribute="height" constant="12" id="X77-OW-qLl"/>
+                                                                                    </constraints>
                                                                                 </customView>
                                                                             </subviews>
+                                                                            <constraints>
+                                                                                <constraint firstItem="hOO-mb-uBC" firstAttribute="centerY" secondItem="Gyc-aC-AZa" secondAttribute="centerY" id="8Cu-kA-5Oo"/>
+                                                                                <constraint firstItem="hOO-mb-uBC" firstAttribute="centerX" secondItem="Gyc-aC-AZa" secondAttribute="centerX" id="zJg-kq-PS8"/>
+                                                                            </constraints>
+                                                                            <connections>
+                                                                                <outlet property="colorDotView" destination="hOO-mb-uBC" id="KTd-Xb-ovR"/>
+                                                                            </connections>
                                                                         </tableCellView>
                                                                     </prototypeCellViews>
                                                                 </tableColumn>
@@ -936,7 +954,7 @@
                                             <visualEffectView blendingMode="behindWindow" material="appearanceBased" state="followsWindowActiveState" translatesAutoresizingMaskIntoConstraints="NO" id="q6g-yu-QNQ">
                                                 <rect key="frame" x="0.0" y="163" width="288" height="22"/>
                                                 <subviews>
-                                                    <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="kGm-iQ-HrB">
+                                                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="kGm-iQ-HrB">
                                                         <rect key="frame" x="3" y="3" width="96" height="16"/>
                                                         <textFieldCell key="cell" lineBreakMode="clipping" title="Polygon Labels" id="HaB-Oo-gZU">
                                                             <font key="font" usesAppearanceFont="YES"/>
@@ -1008,7 +1026,7 @@
                                                                             <rect key="frame" x="139" y="0.0" width="141" height="24"/>
                                                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                                             <subviews>
-                                                                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="j4H-Yz-tv6">
+                                                                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" fixedFrame="YES" translatesAutoresizingMaskIntoConstraints="NO" id="j4H-Yz-tv6">
                                                                                     <rect key="frame" x="0.0" y="4" width="141" height="16"/>
                                                                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMinY="YES" flexibleMaxY="YES"/>
                                                                                     <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Table View Cell" id="QQx-C5-weM">
@@ -1118,6 +1136,7 @@
                     <connections>
                         <outlet property="controlSplitView" destination="PKq-bO-6Ty" id="W7Z-jK-h9E"/>
                         <outlet property="curveControl" destination="uGw-vW-vGX" id="MKp-uc-BTr"/>
+                        <outlet property="labelListTableView" destination="Qc5-lh-FS6" id="gJT-PL-Rzj"/>
                         <outlet property="polygonLabelsTableView" destination="XMG-zQ-KTb" id="roq-db-e66"/>
                         <outlet property="resetButton" destination="mA8-yb-Q8K" id="UuT-7I-WNJ"/>
                     </connections>
@@ -1179,7 +1198,7 @@
                                                                         <binding destination="5uL-S0-O6O" name="value" keyPath="objectValue.icon" id="AxJ-1b-H8R"/>
                                                                     </connections>
                                                                 </imageView>
-                                                                <textField horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="IgP-3w-V0a">
+                                                                <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="IgP-3w-V0a">
                                                                     <rect key="frame" x="23" y="0.0" width="96" height="16"/>
                                                                     <textFieldCell key="cell" lineBreakMode="truncatingTail" sendsActionOnEndEditing="YES" title="Table View Cell" id="aKW-tz-G8k">
                                                                         <font key="font" usesAppearanceFont="YES"/>
@@ -1260,5 +1279,6 @@
         <image name="plus.viewfinder" catalog="system" width="16" height="15"/>
         <image name="square.and.arrow.down" catalog="system" width="15" height="16"/>
         <image name="trash" catalog="system" width="15" height="17"/>
+        <image name="xmark.circle" catalog="system" width="15" height="15"/>
     </resources>
 </document>

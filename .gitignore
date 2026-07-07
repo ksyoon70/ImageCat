@@ -3,6 +3,7 @@
 
 # Xcode user state
 *.xcuserstate
+*.xcbkptlist
 xcuserdata/
 
 # Swift Package Manager

@@ -12,6 +12,18 @@ class ImageControlViewController: NSViewController{
         static let row = NSUserInterfaceItemIdentifier("PolygonLabelRowColumn")
         static let cell = NSUserInterfaceItemIdentifier("PolygonLabelRowCell")
     }
+    
+    // 오늘 수정: Label List table의 Storyboard column identifier와 코드 분기를 맞추기 위한 이름이다.
+    private enum LabelListColumn {
+        static let label = NSUserInterfaceItemIdentifier("LabelListLabelColumn")
+        static let color = NSUserInterfaceItemIdentifier("LabelListColorColumn")
+    }
+
+    // 오늘 수정: makeView는 column identifier가 아니라 prototype cell identifier로 Storyboard cell을 찾는다.
+    private enum LabelListCell {
+        static let label = NSUserInterfaceItemIdentifier("LabelCell")
+        static let color = NSUserInterfaceItemIdentifier("ColorCell")
+    }
 
     private enum PolygonLabelLayout {
         static let checkboxLeading: CGFloat = 8
@@ -28,11 +40,16 @@ class ImageControlViewController: NSViewController{
     
     @IBOutlet weak var polygonLabelsTableView: NSTableView!
     
+    // 오늘 수정: 폴더 전체 label-color 목록을 보여주는 Label List table outlet이다.
+    @IBOutlet weak var labelListTableView: NSTableView!
+    
     private var polygonLabelRows: [PolygonLabelRow] = []
     // 폴더 label-color scan 결과가 나중에 도착해도 현재 annotation 목록을 다시 색칠할 수 있게 보관한다.
     private var currentAnnotation: LabelMeAnnotation?
     // 폴더 전체에서 계산한 label-color set이다. 오른쪽 목록과 overlay가 같은 색 기준을 공유한다.
     private var folderLabelColorPairs: Set<LabelColorPair> = []
+    // 오늘 수정: Set은 row 순서가 없으므로 TableView가 읽을 정렬된 배열을 따로 둔다.
+    private var labelColorRows: [LabelColorPair] = []
 
     private var didSetInitialControlSplitPositions = false
     
@@ -59,7 +76,11 @@ class ImageControlViewController: NSViewController{
         
         polygonLabelsTableView.dataSource = self
         polygonLabelsTableView.delegate = self
+        // 오늘 수정: Label List table도 같은 dataSource/delegate에서 row 수와 cell view를 공급받는다.
+        labelListTableView.dataSource = self
+        labelListTableView.delegate = self
         configurePolygonLabelsTableView()
+        labelListTableView.reloadData()
     }
 
     override func viewDidLayout() {
@@ -99,8 +120,17 @@ class ImageControlViewController: NSViewController{
 
     func setFolderLabelColorPairs(_ pairs: Set<LabelColorPair>) {
         folderLabelColorPairs = pairs
+        // 오늘 수정: 폴더 scan 결과가 들어오면 Label List table의 backing rows를 먼저 갱신한다.
+        reloadLabelListView()
         // 색상 scan 결과만 바뀐 경우에는 사용자가 꺼둔 checkbox 상태를 유지한다.
         rebuildPolygonLabelRows(preservingVisibility: true)
+    }
+    
+    private func reloadLabelListView() {
+        // 오늘 수정: 데이터를 sort해서 list로 만들고, TableView가 numberOfRows/viewFor를 다시 묻게 한다.
+        labelColorRows = folderLabelColorPairs.sorted { $0.label < $1.label }
+        guard isViewLoaded, let labelListTableView = labelListTableView else { return }
+        labelListTableView.reloadData()
     }
 
     private func rebuildPolygonLabelRows(preservingVisibility: Bool) {
@@ -198,27 +228,72 @@ class ImageControlViewController: NSViewController{
 }
 extension ImageControlViewController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        return polygonLabelRows.count
+        // 오늘 수정: 한 컨트롤러가 두 table을 담당하므로 요청한 table별 row 개수를 나눠 반환한다.
+        if tableView == labelListTableView {
+            return labelColorRows.count
+        }
+
+        if tableView == polygonLabelsTableView {
+            return polygonLabelRows.count
+        }
+        return 0
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row < polygonLabelRows.count else { return nil }
-        let item = polygonLabelRows[row]
+        if tableView == labelListTableView {
+            guard row < labelColorRows.count,
+                      let tableColumn = tableColumn else { return nil }
+            
+            let item = labelColorRows[row]
 
-        let cell = tableView.makeView(
-            withIdentifier: PolygonLabelColumn.cell,
-            owner: self
-        ) as? PolygonLabelRowCellView ?? PolygonLabelRowCellView()
-        cell.identifier = PolygonLabelColumn.cell
-        cell.configure(
-            label: item.label,
-            color: item.color,
-            isVisible: item.isVisible,
-            row: row,
-            target: self,
-            action: #selector(polygonLabelCheckboxChanged(_:))
-        )
-        return cell
+            if tableColumn.identifier == LabelListColumn.label {
+                // 오늘 수정: Label List의 label column은 Storyboard의 기본 text cell을 재사용한다.
+                let cell = tableView.makeView(
+                    withIdentifier: LabelListCell.label,
+                    owner: self
+                ) as? NSTableCellView
+
+                cell?.textField?.stringValue = item.label
+                return cell
+            }
+
+            if tableColumn.identifier == LabelListColumn.color {
+                // 오늘 수정: Label List의 color column은 Storyboard의 ColorDotView outlet cell을 재사용한다.
+                let cell = tableView.makeView(
+                    withIdentifier: LabelListCell.color,
+                    owner: self
+                ) as? LabelListColorCellView
+
+                cell?.colorDotView.color = item.color
+                return cell
+            }
+            
+            return nil
+        }
+        
+        if tableView == polygonLabelsTableView {
+            guard row < polygonLabelRows.count else { return nil }
+            let item = polygonLabelRows[row]
+
+            let cell = tableView.makeView(
+                // 오늘 수정: Polygon Labels table은 Label List cell이 아니라 기존 custom row cell identifier를 써야 한다.
+                withIdentifier: PolygonLabelColumn.cell,
+                owner: self
+            ) as? PolygonLabelRowCellView ?? PolygonLabelRowCellView()
+            cell.identifier = PolygonLabelColumn.cell
+            cell.configure(
+                label: item.label,
+                color: item.color,
+                isVisible: item.isVisible,
+                row: row,
+                target: self,
+                action: #selector(polygonLabelCheckboxChanged(_:))
+            )
+            return cell
+        }
+        
+        return nil
+        
     }
 }
 
@@ -311,4 +386,8 @@ private final class PolygonLabelRowCellView: NSTableCellView {
     private func centeredY(for height: CGFloat) -> CGFloat {
         return max(0, (bounds.height - height) / 2)
     }
+}
+final class LabelListColorCellView: NSTableCellView {
+    // 오늘 수정: Storyboard ColorCell 안의 ColorDotView에 런타임 label 색상을 넣기 위한 outlet이다.
+    @IBOutlet weak var colorDotView: ColorDotView!
 }

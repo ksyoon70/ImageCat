@@ -10,6 +10,8 @@ import Cocoa
 class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
     private enum ToolbarLabel {
         static let deleteFile = "Delete File"
+        // 오늘 수정: Delete Polygons toolbar item을 코드에서 식별하기 위한 label이다.
+        static let deletePolygons = "Delete Polygons"
     }
 
     override func windowDidLoad() {
@@ -56,6 +58,14 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
         updatePolygonToolbarItems()
     }
 
+    @IBAction func deletePolygons(_ sender: Any?) {
+        guard let imagePreviewViewController else { return }
+
+        // 오늘 수정: edit 모드에서 overlay가 기억한 선택 shape를 삭제한다.
+        imagePreviewViewController.deleteSelectedAnnotationShape()
+        updatePolygonToolbarItems()
+    }
+
     @IBAction func saveAnnotation(_ sender: Any?) {
         do {
             // 미리보기 오버레이에 반영된 최신 annotation 좌표를 원본 JSON에 저장한다.
@@ -88,6 +98,11 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
                 configureDeleteFileToolbarItem(toolbarItem)
                 return
             }
+            if isDeletePolygonsToolbarItem(toolbarItem) {
+                // 오늘 수정: Storyboard toolbar item이 validation 중 비활성화되지 않도록 target/action을 보강한다.
+                configureDeletePolygonsToolbarItem(toolbarItem, mode: mode)
+                return
+            }
 
             switch toolbarItem.action {
             case #selector(toggleCreatePolygons(_:)):
@@ -114,6 +129,9 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
             return imagePreviewViewController?.polygonInteractionMode != .edit
         case #selector(saveAnnotation(_:)):
             return imagePreviewViewController != nil
+        case #selector(deletePolygons(_:)):
+            // 오늘 수정: Delete Polygons는 edit 모드에서만 의미가 있으므로 edit 모드에만 활성화한다.
+            return imagePreviewViewController?.polygonInteractionMode == .edit
         case #selector(deleteFile(_:)):
             // Delete File은 선택 상태와 무관하게 항상 눌릴 수 있어야 한다.
             return true
@@ -129,10 +147,24 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
         toolbarItem.isEnabled = true
     }
 
+    private func configureDeletePolygonsToolbarItem(_ toolbarItem: NSToolbarItem, mode: PolygonInteractionMode) {
+        // Storyboard의 Delete Polygons item에도 target/action을 보강해서 validation이 안정적으로 동작하게 한다.
+        toolbarItem.target = self
+        toolbarItem.action = #selector(deletePolygons(_:))
+        toolbarItem.isEnabled = mode == .edit
+    }
+
     private func isDeleteFileToolbarItem(_ toolbarItem: NSToolbarItem) -> Bool {
         return toolbarItem.label == ToolbarLabel.deleteFile ||
             toolbarItem.paletteLabel == ToolbarLabel.deleteFile ||
             toolbarItem.action == #selector(deleteFile(_:))
+    }
+
+    private func isDeletePolygonsToolbarItem(_ toolbarItem: NSToolbarItem) -> Bool {
+        // 오늘 수정: Storyboard action 연결 전후 어느 상태에서도 Delete Polygons item을 찾을 수 있게 한다.
+        return toolbarItem.label == ToolbarLabel.deletePolygons ||
+            toolbarItem.paletteLabel == ToolbarLabel.deletePolygons ||
+            toolbarItem.action == #selector(deletePolygons(_:))
     }
 
     private func showSaveError(_ error: Error) {

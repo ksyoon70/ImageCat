@@ -79,26 +79,27 @@ struct LabelColorPair: Hashable {
 }
 
 enum LabelColorProvider {
-    private static let palette: [NSColor] = [
-        .systemGreen,
-        .systemRed,
-        .systemBlue,
-        .systemOrange,
-        .systemPurple,
-        .systemPink,
-        .systemTeal,
-        .systemYellow
-    ]
+    // 오늘 수정: labelme/imgviz와 같은 256색 label colormap을 쓰기 위한 색상 개수다.
+    private static let labelmeColorCount = 256
 
     static func color(at index: Int) -> NSColor {
-        return palette[index % palette.count]
+        // 오늘 수정: labelme auto 색상은 0번 검정색을 건너뛰므로 index 0을 label id 1에 매핑한다.
+        let labelmeLabelID = (index + 1) % labelmeColorCount
+        let rgb = labelmeRGB(for: labelmeLabelID)
+        return NSColor(
+            calibratedRed: CGFloat(rgb.red) / 255,
+            green: CGFloat(rgb.green) / 255,
+            blue: CGFloat(rgb.blue) / 255,
+            alpha: 1
+        )
     }
 
     // 폴더 단위로 같은 label은 항상 같은 색을 쓰도록 정렬된 label 목록에서 pair set을 만든다.
     static func colorPairs(for labels: [String]) -> Set<LabelColorPair> {
         let uniqueLabels = Array(Set(labels)).sorted()
         return Set(uniqueLabels.enumerated().map { index, label in
-            LabelColorPair(label: label, colorIndex: index % palette.count)
+            // 오늘 수정: 8색 palette 반복이 아니라 labelme colormap index를 그대로 보관한다.
+            LabelColorPair(label: label, colorIndex: index)
         })
     }
 
@@ -112,7 +113,8 @@ enum LabelColorProvider {
 
         for label in labels where !existingLabels.contains(label) {
             guard let index = combinedLabels.firstIndex(of: label) else { continue }
-            extendedPairs.insert(LabelColorPair(label: label, colorIndex: index % palette.count))
+            // 오늘 수정: 새 label도 기존 label들과 같은 정렬 위치를 기준으로 labelme 색을 받는다.
+            extendedPairs.insert(LabelColorPair(label: label, colorIndex: index))
         }
 
         return extendedPairs
@@ -132,5 +134,26 @@ enum LabelColorProvider {
         return Dictionary(uniqueKeysWithValues: mergedPairs.map { pair in
             (pair.label, pair.color)
         })
+    }
+
+    // labelme는 imgviz.label_colormap()의 0번 검정색을 건너뛴 색을 shape 색상으로 쓴다.
+    private static func labelmeRGB(for labelID: Int) -> (red: Int, green: Int, blue: Int) {
+        var red = 0
+        var green = 0
+        var blue = 0
+
+        for bit in 0..<8 {
+            let shift = 7 - bit
+            red |= bitValue(labelID >> (bit * 3), at: 0) << shift
+            green |= bitValue(labelID >> (bit * 3), at: 1) << shift
+            blue |= bitValue(labelID >> (bit * 3), at: 2) << shift
+        }
+
+        return (red, green, blue)
+    }
+
+    private static func bitValue(_ value: Int, at index: Int) -> Int {
+        // 오늘 수정: imgviz의 bitget 동작을 Swift 정수 비트 연산으로 옮긴 helper다.
+        return (value >> index) & 1
     }
 }
