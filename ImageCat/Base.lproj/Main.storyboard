@@ -743,14 +743,23 @@
                                 <toolbarItem implicitItemIdentifier="FE6C8694-9813-4AE3-BCA2-F68A65BBEAFE" label="Zoom In" paletteLabel="Zoom In" toolTip="이미지 확대" tag="-1" image="plus.magnifyingglass" catalog="system" bordered="YES" id="153-lk-41m">
                                     <size key="minSize" width="28" height="25"/>
                                     <size key="maxSize" width="28" height="25"/>
+                                    <connections>
+                                        <action selector="zoomIn:" target="jGA-0Y-lOj" id="mKT-RU-1lA"/>
+                                    </connections>
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="0A04298C-FB7B-4D8D-A238-CCC55B8DCF1F" label="Zoom Out" paletteLabel="Zoom Out" toolTip="이미지 축소" tag="-1" image="minus.magnifyingglass" catalog="system" bordered="YES" id="XGf-Sa-ZyC">
                                     <size key="minSize" width="28" height="25"/>
                                     <size key="maxSize" width="28" height="25"/>
+                                    <connections>
+                                        <action selector="zoomOut:" target="jGA-0Y-lOj" id="CJe-PE-eNN"/>
+                                    </connections>
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="F0F64815-523D-458F-B6E2-88B3C8611DF9" label="Image Fit" paletteLabel="Image Fit" toolTip="이미지를 화면에 채웁니다" tag="-1" image="photo.circle" catalog="system" bordered="YES" id="Vgb-K1-DN6">
                                     <size key="minSize" width="27" height="25"/>
                                     <size key="maxSize" width="27" height="25"/>
+                                    <connections>
+                                        <action selector="fitImage:" target="jGA-0Y-lOj" id="Ar3-91-Ypx"/>
+                                    </connections>
                                 </toolbarItem>
                                 <toolbarItem implicitItemIdentifier="NSToolbarShowColorsItem" id="smZ-Bs-KXI"/>
                                 <toolbarItem implicitItemIdentifier="NSToolbarShowFontsItem" id="KIC-Xr-X47"/>
@@ -842,7 +851,7 @@
                                         <autoresizingMask key="autoresizingMask"/>
                                         <subviews>
                                             <visualEffectView blendingMode="behindWindow" material="appearanceBased" state="followsWindowActiveState" translatesAutoresizingMaskIntoConstraints="NO" id="IKf-Tg-3aT">
-                                                <rect key="frame" x="0.0" y="161" width="261" height="22"/>
+                                                <rect key="frame" x="0.0" y="159" width="261" height="22"/>
                                                 <subviews>
                                                     <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="Ph5-ep-Meg">
                                                         <rect key="frame" x="3" y="3" width="63" height="16"/>
@@ -860,13 +869,13 @@
                                                 </constraints>
                                             </visualEffectView>
                                             <scrollView autohidesScrollers="YES" horizontalLineScroll="17" horizontalPageScroll="10" verticalLineScroll="17" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="u6R-pV-ZBa">
-                                                <rect key="frame" x="0.0" y="0.0" width="261" height="161"/>
+                                                <rect key="frame" x="0.0" y="0.0" width="261" height="159"/>
                                                 <clipView key="contentView" id="hAK-mG-2J5">
-                                                    <rect key="frame" x="1" y="1" width="259" height="159"/>
+                                                    <rect key="frame" x="1" y="1" width="259" height="157"/>
                                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                     <subviews>
                                                         <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="lastColumnOnly" multipleSelection="NO" autosaveColumns="NO" rowSizeStyle="automatic" viewBased="YES" id="Qc5-lh-FS6">
-                                                            <rect key="frame" x="0.0" y="0.0" width="259" height="159"/>
+                                                            <rect key="frame" x="0.0" y="0.0" width="259" height="157"/>
                                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                             <size key="intercellSpacing" width="17" height="0.0"/>
                                                             <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -922,7 +931,7 @@
                                                     </subviews>
                                                 </clipView>
                                                 <scroller key="horizontalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="YWI-uf-AaY">
-                                                    <rect key="frame" x="1" y="147" width="259" height="15"/>
+                                                    <rect key="frame" x="1" y="145" width="259" height="15"/>
                                                     <autoresizingMask key="autoresizingMask"/>
                                                 </scroller>
                                                 <scroller key="verticalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" horizontal="NO" id="frJ-1Z-MgL">
@@ -946,7 +955,7 @@
                                         <autoresizingMask key="autoresizingMask"/>
                                         <subviews>
                                             <visualEffectView blendingMode="behindWindow" material="appearanceBased" state="followsWindowActiveState" translatesAutoresizingMaskIntoConstraints="NO" id="q6g-yu-QNQ">
-                                                <rect key="frame" x="0.0" y="165" width="261" height="22"/>
+                                                <rect key="frame" x="0.0" y="167" width="261" height="22"/>
                                                 <subviews>
                                                     <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="kGm-iQ-HrB">
                                                         <rect key="frame" x="3" y="3" width="96" height="16"/>
@@ -964,13 +973,13 @@
                                                 </constraints>
                                             </visualEffectView>
                                             <scrollView autohidesScrollers="YES" horizontalLineScroll="24" horizontalPageScroll="10" verticalLineScroll="24" verticalPageScroll="10" usesPredominantAxisScrolling="NO" translatesAutoresizingMaskIntoConstraints="NO" id="JoC-mD-IEb">
-                                                <rect key="frame" x="0.0" y="0.0" width="261" height="165"/>
+                                                <rect key="frame" x="0.0" y="0.0" width="261" height="167"/>
                                                 <clipView key="contentView" id="THF-Q1-Heq">
-                                                    <rect key="frame" x="1" y="1" width="259" height="148"/>
+                                                    <rect key="frame" x="1" y="1" width="259" height="150"/>
                                                     <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                     <subviews>
                                                         <tableView verticalHuggingPriority="750" allowsExpansionToolTips="YES" columnAutoresizingStyle="lastColumnOnly" multipleSelection="NO" autosaveColumns="NO" rowHeight="24" rowSizeStyle="automatic" viewBased="YES" id="XMG-zQ-KTb">
-                                                            <rect key="frame" x="0.0" y="0.0" width="313" height="148"/>
+                                                            <rect key="frame" x="0.0" y="0.0" width="313" height="150"/>
                                                             <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                                                             <size key="intercellSpacing" width="17" height="0.0"/>
                                                             <color key="backgroundColor" name="controlBackgroundColor" catalog="System" colorSpace="catalog"/>
@@ -1065,7 +1074,7 @@
                                                     </subviews>
                                                 </clipView>
                                                 <scroller key="horizontalScroller" wantsLayer="YES" verticalHuggingPriority="750" horizontal="YES" id="FQs-sl-e7c">
-                                                    <rect key="frame" x="1" y="149" width="259" height="15"/>
+                                                    <rect key="frame" x="1" y="151" width="259" height="15"/>
                                                     <autoresizingMask key="autoresizingMask"/>
                                                 </scroller>
                                                 <scroller key="verticalScroller" hidden="YES" wantsLayer="YES" verticalHuggingPriority="750" horizontal="NO" id="QiA-yY-1hh">

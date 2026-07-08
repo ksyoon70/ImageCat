@@ -50,6 +50,9 @@ class ImageControlViewController: NSViewController{
     private var folderLabelColorPairs: Set<LabelColorPair> = []
     // 오늘 수정: Set은 row 순서가 없으므로 TableView가 읽을 정렬된 배열을 따로 둔다.
     private var labelColorRows: [LabelColorPair] = []
+    // 오늘 수정: preview에서 객체 선택 -> Polygon Labels row 선택으로 동기화할 때
+    // NSTableView selectionDidChange가 다시 preview 선택을 호출하는 순환을 막기 위한 플래그다.
+    private var isSyncingPolygonLabelSelection = false
 
     private var didSetInitialControlSplitPositions = false
     
@@ -112,10 +115,39 @@ class ImageControlViewController: NSViewController{
         curveControl.resetPoints()
         
     }
+
+    func resetCurveForImageSelection() {
+        guard isViewLoaded else { return }
+
+        // 이미지가 바뀔 때 preview는 이미 원본 이미지를 다시 넣으므로 curve UI/LUT만 조용히 원점으로 되돌린다.
+        // reset 버튼처럼 change handler를 호출하면 같은 원본 이미지에 대해 불필요한 렌더 요청이 한 번 더 생기므로
+        // 이미지 선택 경로에서는 UI 상태와 LUT만 초기화한다.
+        curveControl.resetPoints(notifiesChangeHandlers: false)
+    }
     
     func updatePolygonLabels(from annotation: LabelMeAnnotation?) {
         currentAnnotation = annotation
         rebuildPolygonLabelRows(preservingVisibility: false)
+    }
+
+    func selectPolygonLabelRow(forShapeIndex shapeIndex: Int?) {
+        guard isViewLoaded, let polygonLabelsTableView = polygonLabelsTableView else { return }
+
+        // 오늘 수정: 이 함수는 preview overlay에서 선택된 shape를 table selection에 반영하는 경로다.
+        // 사용자가 table row를 직접 클릭한 경우와 구분하기 위해 동기화 중 플래그를 켠다.
+        isSyncingPolygonLabelSelection = true
+        defer { isSyncingPolygonLabelSelection = false }
+
+        guard let shapeIndex,
+              let row = polygonLabelRows.firstIndex(where: { $0.shapeIndex == shapeIndex }) else {
+            // 오늘 수정: preview 쪽 선택이 해제되었거나 row가 없는 shape라면 table selection도 해제한다.
+            polygonLabelsTableView.deselectAll(nil)
+            return
+        }
+
+        // 오늘 수정: 같은 shapeIndex를 가진 Polygon Labels row를 선택하고 화면에 보이도록 스크롤한다.
+        polygonLabelsTableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        polygonLabelsTableView.scrollRowToVisible(row)
     }
 
     func setFolderLabelColorPairs(_ pairs: Set<LabelColorPair>) {
@@ -285,6 +317,25 @@ extension ImageControlViewController: NSTableViewDataSource, NSTableViewDelegate
         
         return nil
         
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let tableView = notification.object as? NSTableView,
+              tableView == polygonLabelsTableView,
+              !isSyncingPolygonLabelSelection else {
+            return
+        }
+
+        // 오늘 수정: 사용자가 Polygon Labels row를 직접 선택한 경우에는 해당 shapeIndex를 preview로 넘긴다.
+        // preview overlay는 그 shape를 selectedShapeIndex로 저장하고 강조 표시한다.
+        let row = polygonLabelsTableView.selectedRow
+        guard row >= 0, row < polygonLabelRows.count else {
+            // 오늘 수정: table selection이 없어지면 preview의 shape 선택도 같이 해제한다.
+            imagePreviewViewController?.selectAnnotationShape(at: nil)
+            return
+        }
+
+        imagePreviewViewController?.selectAnnotationShape(at: polygonLabelRows[row].shapeIndex)
     }
 }
 

@@ -50,7 +50,10 @@ final class ImageCurveControl: NSView {
         rebuildLUT()
     }
 
-    func resetPoints() {
+    // 오늘 수정: reset 버튼에서 호출할 때는 preview를 원본 상태로 다시 렌더링해야 하므로 handler를 호출한다.
+    // 반면 이미지 파일 선택 시에는 preview가 이미 새 원본 이미지를 직접 로드하므로,
+    // notifiesChangeHandlers를 false로 넘겨 curve UI/LUT만 초기화하고 중복 렌더링을 피한다.
+    func resetPoints(notifiesChangeHandlers: Bool = true) {
         selectedPointIndex = nil
         virtualPoint = nil
         isEditing = false
@@ -58,6 +61,8 @@ final class ImageCurveControl: NSView {
             CGPoint(x: 0, y: 0),
             CGPoint(x: 255, y: 255)
         ]
+        // 오늘 수정: 조용한 reset 경로에서는 onCurveChanged/onCurveEditingEnded callback을 호출하지 않는다.
+        guard notifiesChangeHandlers else { return }
         onCurveChanged?(self)
         // 리셋 버튼도 편집 종료와 같은 경로로 미리보기를 원본 상태로 되돌린다.
         onCurveEditingEnded?(self)
