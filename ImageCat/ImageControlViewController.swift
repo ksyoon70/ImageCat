@@ -251,22 +251,13 @@ extension ImageControlViewController: NSTableViewDataSource, NSTableViewDelegate
                 let cell = tableView.makeView(
                     withIdentifier: LabelListCell.label,
                     owner: self
-                ) as? NSTableCellView
+                ) as? LabelListRowCellView
 
                 cell?.textField?.stringValue = item.label
-                return cell
-            }
-
-            if tableColumn.identifier == LabelListColumn.color {
-                // 오늘 수정: Label List의 color column은 Storyboard의 ColorDotView outlet cell을 재사용한다.
-                let cell = tableView.makeView(
-                    withIdentifier: LabelListCell.color,
-                    owner: self
-                ) as? LabelListColorCellView
-
                 cell?.colorDotView.color = item.color
                 return cell
             }
+
             
             return nil
         }
@@ -387,7 +378,13 @@ private final class PolygonLabelRowCellView: NSTableCellView {
         return max(0, (bounds.height - height) / 2)
     }
 }
-final class LabelListColorCellView: NSTableCellView {
-    // 오늘 수정: Storyboard ColorCell 안의 ColorDotView에 런타임 label 색상을 넣기 위한 outlet이다.
+
+final class LabelListRowCellView: NSTableCellView {
+
     @IBOutlet weak var colorDotView: ColorDotView!
+    
+    func configure(label: String, color: NSColor) {
+        textField?.stringValue = label
+        colorDotView.color = color
+    }
 }
