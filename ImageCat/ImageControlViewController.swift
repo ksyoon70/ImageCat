@@ -130,24 +130,35 @@ class ImageControlViewController: NSViewController{
         rebuildPolygonLabelRows(preservingVisibility: false)
     }
 
-    func selectPolygonLabelRow(forShapeIndex shapeIndex: Int?) {
+    func selectPolygonLabelRows(forShapeIndexes shapeIndexes: Set<Int>) {
         guard isViewLoaded, let polygonLabelsTableView = polygonLabelsTableView else { return }
 
         // 오늘 수정: 이 함수는 preview overlay에서 선택된 shape를 table selection에 반영하는 경로다.
         // 사용자가 table row를 직접 클릭한 경우와 구분하기 위해 동기화 중 플래그를 켠다.
+        // 오늘 수정 상세:
+        // preview에서 Cmd-click으로 여러 polygon을 선택하면 shape index Set이 전달된다.
+        // table row 번호와 shape index는 항상 같다고 가정하지 않고 polygonLabelRows에서 매핑한다.
+        // selectRowIndexes(_:byExtendingSelection: false)는 기존 table selection을 이 Set에 맞춰 완전히 교체한다.
         isSyncingPolygonLabelSelection = true
         defer { isSyncingPolygonLabelSelection = false }
 
-        guard let shapeIndex,
-              let row = polygonLabelRows.firstIndex(where: { $0.shapeIndex == shapeIndex }) else {
+        var rows = IndexSet()
+        polygonLabelRows.enumerated().forEach { row, item in
+            if shapeIndexes.contains(item.shapeIndex) {
+                rows.insert(row)
+            }
+        }
+        guard !rows.isEmpty else {
             // 오늘 수정: preview 쪽 선택이 해제되었거나 row가 없는 shape라면 table selection도 해제한다.
             polygonLabelsTableView.deselectAll(nil)
             return
         }
 
-        // 오늘 수정: 같은 shapeIndex를 가진 Polygon Labels row를 선택하고 화면에 보이도록 스크롤한다.
-        polygonLabelsTableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
-        polygonLabelsTableView.scrollRowToVisible(row)
+        // 오늘 수정: preview의 다중 shape 선택을 Polygon Labels table의 다중 row 선택으로 반영한다.
+        polygonLabelsTableView.selectRowIndexes(rows, byExtendingSelection: false)
+        if let firstRow = rows.first {
+            polygonLabelsTableView.scrollRowToVisible(firstRow)
+        }
     }
 
     func setFolderLabelColorPairs(_ pairs: Set<LabelColorPair>) {
@@ -204,6 +215,10 @@ class ImageControlViewController: NSViewController{
         polygonLabelsTableView.intercellSpacing = .zero
         polygonLabelsTableView.headerView = nil
         polygonLabelsTableView.allowsColumnResizing = false
+        // 오늘 수정 상세:
+        // storyboard에서 Multiple Selection을 켜도 코드가 단일 선택으로 덮으면 런타임에서 한 줄만 남는다.
+        // 그래서 코드에서도 명시적으로 다중 선택을 켜고, selectionDidChange에서 selectedRowIndexes 전체를 읽는다.
+        polygonLabelsTableView.allowsMultipleSelection = true
         polygonLabelsTableView.tableColumns.forEach { polygonLabelsTableView.removeTableColumn($0) }
 
         let column = NSTableColumn(identifier: PolygonLabelColumn.row)
@@ -326,16 +341,28 @@ extension ImageControlViewController: NSTableViewDataSource, NSTableViewDelegate
             return
         }
 
-        // 오늘 수정: 사용자가 Polygon Labels row를 직접 선택한 경우에는 해당 shapeIndex를 preview로 넘긴다.
-        // preview overlay는 그 shape를 selectedShapeIndex로 저장하고 강조 표시한다.
-        let row = polygonLabelsTableView.selectedRow
-        guard row >= 0, row < polygonLabelRows.count else {
+        // 오늘 수정: 사용자가 Polygon Labels row를 직접 선택한 경우에는 모든 선택 row의 shape를 preview에서도 선택한다.
+        // selectedShapeIndex는 기존 삭제/꼭지점 편집 경로를 위한 대표 선택으로만 유지한다.
+        // 오늘 수정 상세:
+        // NSTableView의 selectedRow는 단일 row만 알려주므로 다중 선택에는 부적합하다.
+        // selectedRowIndexes 전체를 shapeIndex Set으로 바꿔 overlay에 전달해야 preview의 여러 polygon이 함께 강조된다.
+        // notifiesSelectionChange=false는 table -> preview 동기화가 다시 preview -> table 동기화를 호출하지 않게 하는 안전장치다.
+        let selectedShapeIndexes = Set<Int>(polygonLabelsTableView.selectedRowIndexes.compactMap { row -> Int? in
+            guard row >= 0, row < polygonLabelRows.count else { return nil }
+            return polygonLabelRows[row].shapeIndex
+        })
+        guard !selectedShapeIndexes.isEmpty else {
             // 오늘 수정: table selection이 없어지면 preview의 shape 선택도 같이 해제한다.
-            imagePreviewViewController?.selectAnnotationShape(at: nil)
+            imagePreviewViewController?.selectAnnotationShapes(at: [], notifiesSelectionChange: false)
             return
         }
 
-        imagePreviewViewController?.selectAnnotationShape(at: polygonLabelRows[row].shapeIndex)
+        imagePreviewViewController?.setPolygonInteractionMode(.edit)
+        view.window?.toolbar?.validateVisibleItems()
+        imagePreviewViewController?.selectAnnotationShapes(
+            at: selectedShapeIndexes,
+            notifiesSelectionChange: false
+        )
     }
 }
 

@@ -78,6 +78,12 @@ class ImagePreviewViewController: NSViewController {
     private var pendingRenderRequest: RenderRequest?
     // 동시에 여러 렌더 작업이 큐에 쌓이지 않도록 실행 상태를 추적한다.
     private var isRenderScheduled = false
+    // 오늘 수정 상세:
+    // annotationOverlayView 안의 LabelMeAnnotation은 메모리에서 계속 수정된다.
+    // 이 값이 true이면 아직 JSON 파일에 쓰지 않은 변경이 있다는 뜻이며,
+    // 이미지 이동/폴더 이동 전에 자동저장 또는 저장 확인 alert를 띄우는 기준으로 사용한다.
+    // load/save/delete label file이 끝나면 false로 돌린다.
+    private var hasUnsavedAnnotationChanges = false
     // 오늘 수정: 1은 fit 상태, 1.25는 fit 크기의 125%, 8은 800%를 의미한다.
     private var zoomScale: CGFloat = 1
     // 오늘 수정: annotation imageSize 또는 실제 이미지 pixel size를 보관해 zoom/좌표 변환 기준으로 사용한다.
@@ -115,6 +121,19 @@ class ImagePreviewViewController: NSViewController {
             guard let self else { return false }
             return self.annotationOverlayView.interactionMode == .inactive
         }
+        // 오늘 수정 상세:
+        // 트랙패드 pinch는 이벤트가 scrollView, canvas, overlay 중 어디로 들어오느냐가 모드마다 다르다.
+        // inactive 모드에서는 canvas/scrollView가 받을 수 있고, edit 모드에서는 overlay가 hit-test를 잡는다.
+        // 세 view 모두 같은 magnify callback을 공유하게 해서 어떤 모드에서도 같은 zoomScale 경로를 탄다.
+        scrollView.onMagnify = { [weak self] event in
+            self?.magnifyImage(with: event)
+        }
+        imageCanvasView.onMagnify = { [weak self] event in
+            self?.magnifyImage(with: event)
+        }
+        annotationOverlayView.onMagnify = { [weak self] event in
+            self?.magnifyImage(with: event)
+        }
 
         // 오늘 수정: zoom layout이 imageView.frame을 직접 계산하므로 AppKit 비율 맞춤 scaling 대신
         // 주어진 frame에 이미지를 정확히 채우는 scaling을 쓴다.
@@ -127,11 +146,15 @@ class ImagePreviewViewController: NSViewController {
 
         // 새 도형이 추가되면 오른쪽 라벨 목록도 즉시 최신 annotation 기준으로 갱신한다.
         annotationOverlayView.onAnnotationChanged = { [weak self] annotation in
+            // 오늘 수정 상세:
+            // shape 추가/삭제/붙여넣기/점 편집/드래그 종료처럼 annotation 내용이 실제로 바뀐 경우
+            // overlay가 이 callback을 호출한다. 여기서 dirty flag를 세워 저장 확인 로직과 연결한다.
+            self?.hasUnsavedAnnotationChanges = true
             self?.imageControlViewController?.updatePolygonLabels(from: annotation)
         }
         // 오늘 수정: preview에서 객체를 클릭하면 오른쪽 Polygon Labels table도 같은 shape row를 선택하게 한다.
-        annotationOverlayView.onSelectedShapeChanged = { [weak self] shapeIndex in
-            self?.imageControlViewController?.selectPolygonLabelRow(forShapeIndex: shapeIndex)
+        annotationOverlayView.onSelectedShapeChanged = { [weak self] shapeIndexes in
+            self?.imageControlViewController?.selectPolygonLabelRows(forShapeIndexes: shapeIndexes)
         }
         // 오버레이는 화면 입력만 담당하고, label 입력 창은 뷰 컨트롤러가 띄운다.
         annotationOverlayView.onLabelRequested = { [weak self] labels in
@@ -192,6 +215,7 @@ class ImagePreviewViewController: NSViewController {
             annotationOverlayView.loadAnnotation(nil)
             annotationOverlayView.displayedImageRect = .zero
             annotationOverlayView.visibleShapeIndexes = []
+            hasUnsavedAnnotationChanges = false
             imageControlViewController?.updatePolygonLabels(from: nil)
             emptyLabel.isHidden = false
             return
@@ -214,6 +238,7 @@ class ImagePreviewViewController: NSViewController {
 
         // 오늘 수정: annotation 교체 시 undo history와 선택 상태가 이전 이미지에서 이어지면 안 되므로 loadAnnotation으로 교체한다.
         annotationOverlayView.loadAnnotation(annotation)
+        hasUnsavedAnnotationChanges = false
         imageControlViewController?.updatePolygonLabels(from: annotation)
         updateZoomLayout(preservingVisibleImageCenter: false)
 
@@ -230,6 +255,18 @@ class ImagePreviewViewController: NSViewController {
 
         zoomScale = clampedScale
         updateZoomLayout(preservingVisibleImageCenter: preservingVisibleImageCenter)
+    }
+
+    private func magnifyImage(with event: NSEvent) {
+        // 오늘 수정 상세:
+        // NSEvent.magnification은 pinch gesture의 "이번 이벤트 변화량"이다.
+        // 기존 toolbar zoom과 같은 zoomScale을 곱해서 사용해야 버튼 zoom, fit, scroll layout과 충돌하지 않는다.
+        // setZoomScale 내부에서 최소/최대 배율 clamp와 visible center 유지가 처리된다.
+        guard currentDisplayImageSize != nil else { return }
+
+        let scaleFactor = max(0.1, 1 + event.magnification)
+        setZoomScale(zoomScale * scaleFactor)
+        view.window?.toolbar?.validateVisibleItems()
     }
 
     private func updateZoomLayout(preservingVisibleImageCenter: Bool) {
@@ -345,8 +382,12 @@ class ImagePreviewViewController: NSViewController {
         annotationOverlayView.visibleShapeIndexes = indexes
     }
 
-    func selectAnnotationShape(at shapeIndex: Int?) {
-        annotationOverlayView.selectShape(at: shapeIndex)
+    func selectAnnotationShape(at shapeIndex: Int?, notifiesSelectionChange: Bool = true) {
+        annotationOverlayView.selectShape(at: shapeIndex, notifiesSelectionChange: notifiesSelectionChange)
+    }
+
+    func selectAnnotationShapes(at shapeIndexes: Set<Int>, notifiesSelectionChange: Bool = true) {
+        annotationOverlayView.selectShapes(at: shapeIndexes, notifiesSelectionChange: notifiesSelectionChange)
     }
 
     // 파일 리스트가 폴더 전체 JSON scan으로 만든 label-color set을 overlay에 전달한다.
@@ -394,13 +435,51 @@ class ImagePreviewViewController: NSViewController {
         setZoomScale(1, preservingVisibleImageCenter: false)
     }
 
+    var selectedAnnotationShapeIndexes: Set<Int> {
+        return annotationOverlayView.selectedAnnotationShapeIndexes
+    }
+
+    var hasUnsavedAnnotationEdits: Bool {
+        return hasUnsavedAnnotationChanges
+    }
+
     @discardableResult
     func deleteSelectedAnnotationShape() -> Bool {
         // 오늘 수정: WindowController가 private overlay에 직접 접근하지 않도록 공개 wrapper를 둔다.
         return annotationOverlayView.deleteSelectedShape()
     }
 
+    @discardableResult
+    func deleteCurrentAnnotationFile() throws -> Bool {
+        // 오늘 수정 상세:
+        // toolbar Delete File 요청은 실제 이미지 파일 삭제가 아니라 현재 이미지에 딸린 LabelMe JSON 삭제다.
+        // JSON을 지운 뒤 preview에는 같은 이미지 크기의 빈 annotation을 다시 로드해
+        // 오른쪽 Polygon Labels와 overlay 선택 상태가 삭제된 파일 상태와 일치하도록 만든다.
+        guard let imageURL else {
+            throw AnnotationSaveError.missingImage
+        }
+
+        let jsonURL = imageURL.deletingPathExtension().appendingPathExtension("json")
+        if FileManager.default.fileExists(atPath: jsonURL.path) {
+            try FileManager.default.removeItem(at: jsonURL)
+        }
+
+        let imageSize = currentDisplayImageSize ?? .zero
+        let emptyAnnotation = LabelMeAnnotation(
+            shapes: [],
+            imageHeight: imageSize.height,
+            imageWidth: imageSize.width
+        )
+        annotationOverlayView.loadAnnotation(emptyAnnotation)
+        hasUnsavedAnnotationChanges = false
+        imageControlViewController?.updatePolygonLabels(from: emptyAnnotation)
+        return true
+    }
+
     func saveCurrentAnnotation() throws {
+        // 오늘 수정 상세:
+        // JSON 파일이 없더라도 saveAnnotation(_:for:)가 새 root dictionary를 만들어
+        // 현재 이미지 basename.json 파일을 생성한다. 저장 성공 후에는 dirty flag를 false로 만든다.
         guard let imageURL else {
             throw AnnotationSaveError.missingImage
         }
@@ -410,6 +489,7 @@ class ImagePreviewViewController: NSViewController {
         }
 
         try Self.saveAnnotation(annotation, for: imageURL)
+        hasUnsavedAnnotationChanges = false
     }
 
     // 커브를 이미지 미리보기에 적용한다. 드래그 중에는 빠른 저해상도 렌더링을 사용한다.
@@ -792,6 +872,7 @@ private final class ImageCanvasView: NSView {
     // 오늘 수정: inactive 모드에서 이미지 빈 공간을 드래그하면 scroll panning처럼 동작하게 하기 위한 callback이다.
     // edit 모드 panning은 overlay가 이벤트를 잡기 때문에 AnnotationOverlayView에서 별도로 처리한다.
     var allowsDragPanning: (() -> Bool)?
+    var onMagnify: ((NSEvent) -> Void)?
     weak var scrollView: NSScrollView?
     private var lastDragLocationInWindow: CGPoint?
 
@@ -844,9 +925,15 @@ private final class ImageCanvasView: NSView {
         lastDragLocationInWindow = nil
         NSCursor.arrow.set()
     }
+
+    override func magnify(with event: NSEvent) {
+        onMagnify?(event)
+    }
 }
 
 private final class PannableImageScrollView: NSScrollView {
+    var onMagnify: ((NSEvent) -> Void)?
+
     var allowsContentDragPanning: (() -> Bool)? {
         didSet {
             // 오늘 수정: scrollView가 documentView를 갖기 전/후 어느 시점에 설정돼도 canvas가 같은 callback을 받도록 전달한다.
@@ -863,9 +950,20 @@ private final class PannableImageScrollView: NSScrollView {
             }
         }
     }
+
+    override func magnify(with event: NSEvent) {
+        onMagnify?(event)
+    }
 }
 
 private final class AnnotationOverlayView: NSView {
+    // 오늘 수정 상세:
+    // 이미지 간 객체 복사를 위해 앱 실행 중 공유되는 임시 clipboard다.
+    // NSPasteboard가 아니라 앱 내부 static 저장소를 쓰는 이유는 LabelMeAnnotation.Shape 값을
+    // label/points/shape_type 그대로 보관하면 다른 이미지로 이동해도 손실 없이 붙여넣을 수 있기 때문이다.
+    // 앱을 종료하면 사라지는 임시 상태이며, 시스템 clipboard에는 영향을 주지 않는다.
+    private static var copiedShapes: [LabelMeAnnotation.Shape] = []
+
     private enum HandleStyle {
         static let normalDiameter: CGFloat = 10
         static let selectedSide: CGFloat = 12
@@ -907,6 +1005,7 @@ private final class AnnotationOverlayView: NSView {
         let annotation: LabelMeAnnotation
         let visibleShapeIndexes: Set<Int>
         let selectedShapeIndex: Int?
+        let selectedShapeIndexes: Set<Int>
         let selectedVertex: VertexSelection?
     }
 
@@ -921,6 +1020,7 @@ private final class AnnotationOverlayView: NSView {
             if let selectedShapeIndex, annotation?.shapes.indices.contains(selectedShapeIndex) != true {
                 self.selectedShapeIndex = nil
             }
+            selectedShapeIndexes = Set(selectedShapeIndexes.filter { annotation?.shapes.indices.contains($0) == true })
             if let selectedVertex, !isValidVertexSelection(selectedVertex, in: annotation) {
                 self.selectedVertex = nil
             }
@@ -964,7 +1064,12 @@ private final class AnnotationOverlayView: NSView {
     private var labelColors: [String: NSColor] = [:]
     private var trackingArea: NSTrackingArea?
     // 오늘 수정: toolbar 버튼을 누르러 마우스가 떠나도 edit 선택 shape를 유지하기 위한 상태다.
+    // 오늘 수정 상세:
+    // selectedShapeIndex는 기존 삭제/꼭지점 편집 코드가 기대하는 "대표 선택"이다.
+    // selectedShapeIndexes는 table 다중 선택과 Cmd-click 다중 선택을 표현하는 실제 선택 집합이다.
+    // 다중 선택 상태에서도 vertex 편집/삭제 같은 기존 단일 대상 작업은 selectedShapeIndex를 기준으로 동작한다.
     private var selectedShapeIndex: Int?
+    private var selectedShapeIndexes: Set<Int> = []
     // 오늘 수정: context menu의 "Remove Selected Point"와 선택 꼭지점 강조를 위해 shape뿐 아니라 vertex까지 따로 저장한다.
     private var selectedVertex: VertexSelection?
     private var hoveredShapeIndex: Int?
@@ -989,19 +1094,21 @@ private final class AnnotationOverlayView: NSView {
     // 생성 확정과 label 입력은 상위 컨트롤러와 협력해서 처리한다.
     var onAnnotationChanged: ((LabelMeAnnotation?) -> Void)?
     // 오늘 수정: preview 객체 선택과 오른쪽 Polygon Labels table 선택을 양방향으로 맞추기 위한 callback이다.
-    var onSelectedShapeChanged: ((Int?) -> Void)?
+    var onSelectedShapeChanged: ((Set<Int>) -> Void)?
     var onLabelRequested: (([String]) -> String?)?
     var onPanDragChanged: ((CGPoint, CGPoint) -> Void)?
+    var onMagnify: ((NSEvent) -> Void)?
     // 오늘 수정: overlay가 first responder일 때 a/d 키 입력을 파일 리스트 이미지 이동으로 넘기기 위한 callback이다.
     var onSelectNextImage: (() -> Void)?
     var onSelectPreviousImage: (() -> Void)?
 
-    var interactionMode: PolygonInteractionMode = .inactive {
+    var interactionMode: PolygonInteractionMode = .edit {
         didSet {
             guard oldValue != interactionMode else { return }
             // 모드가 바뀌면 선택 핸들과 작성 중인 임시 도형을 모두 정리한다.
             // 오늘 수정: edit 선택은 모드가 바뀌면 더 이상 유효하지 않으므로 함께 초기화한다.
             selectedShapeIndex = nil
+            selectedShapeIndexes = []
             selectedVertex = nil
             hoveredShapeIndex = nil
             hoveredVertex = nil
@@ -1040,11 +1147,16 @@ private final class AnnotationOverlayView: NSView {
         }
     }
 
+    var selectedAnnotationShapeIndexes: Set<Int> {
+        return selectedShapeIndexes
+    }
+
     func loadAnnotation(_ annotation: LabelMeAnnotation?) {
         // 오늘 수정: 새 이미지/annotation으로 교체할 때 이전 이미지의 undo history, 선택, drag 상태를 모두 버린다.
         // 그렇지 않으면 Cmd+Z가 이전 파일의 polygon 상태를 현재 파일에 적용할 수 있다.
         undoSnapshots.removeAll()
         selectedShapeIndex = nil
+        selectedShapeIndexes = []
         selectedVertex = nil
         hoveredShapeIndex = nil
         hoveredVertex = nil
@@ -1057,17 +1169,20 @@ private final class AnnotationOverlayView: NSView {
         notifySelectedShapeChanged()
     }
 
-    func selectShape(at shapeIndex: Int?) {
+    func selectShape(at shapeIndex: Int?, notifiesSelectionChange: Bool = true) {
         guard let shapeIndex else {
             // 오늘 수정: Polygon Labels table에서 선택이 해제되면 preview 선택도 같이 해제한다.
             selectedShapeIndex = nil
+            selectedShapeIndexes = []
             selectedVertex = nil
             hoveredShapeIndex = nil
             hoveredVertex = nil
             draggingVertex = nil
             draggingShapeIndex = nil
             shapeDragLastImagePoint = nil
-            notifySelectedShapeChanged()
+            if notifiesSelectionChange {
+                notifySelectedShapeChanged()
+            }
             needsDisplay = true
             return
         }
@@ -1077,12 +1192,72 @@ private final class AnnotationOverlayView: NSView {
         // 오늘 수정: Polygon Labels row를 클릭한 경우 shape 전체 선택만 수행하고 vertex 선택은 비운다.
         // 이 상태에서는 Delete Polygons와 shape 강조가 동작하고, 꼭지점 전용 메뉴는 뜨지 않는다.
         selectedShapeIndex = shapeIndex
+        selectedShapeIndexes = [shapeIndex]
         selectedVertex = nil
         hoveredShapeIndex = shapeIndex
         hoveredVertex = nil
         draggingVertex = nil
         draggingShapeIndex = nil
         shapeDragLastImagePoint = nil
+        if notifiesSelectionChange {
+            notifySelectedShapeChanged()
+        }
+        needsDisplay = true
+    }
+
+    func selectShapes(at shapeIndexes: Set<Int>, notifiesSelectionChange: Bool = true) {
+        // 오늘 수정 상세:
+        // Polygon Labels table에서 여러 row가 선택되면 shape index Set으로 이 함수에 들어온다.
+        // annotation이 바뀐 직후 오래된 index가 섞일 수 있으므로 현재 shapes 범위에 있는 index만 남긴다.
+        // notifiesSelectionChange=false는 table -> preview 동기화 중 다시 preview -> table 콜백이 도는 것을 막기 위한 옵션이다.
+        let validShapeIndexes = Set(shapeIndexes.filter {
+            annotation?.shapes.indices.contains($0) == true
+        })
+
+        guard !validShapeIndexes.isEmpty else {
+            selectShape(at: nil, notifiesSelectionChange: notifiesSelectionChange)
+            return
+        }
+
+        selectedShapeIndexes = validShapeIndexes
+        selectedShapeIndex = validShapeIndexes.sorted().first
+        selectedVertex = nil
+        hoveredShapeIndex = selectedShapeIndex
+        hoveredVertex = nil
+        draggingVertex = nil
+        draggingShapeIndex = nil
+        shapeDragLastImagePoint = nil
+        if notifiesSelectionChange {
+            notifySelectedShapeChanged()
+        }
+        needsDisplay = true
+    }
+
+    private func toggleShapeSelection(at location: CGPoint) {
+        // 오늘 수정 상세:
+        // edit 모드에서 Cmd-click한 객체를 선택 Set에 추가하거나 제거한다.
+        // 일반 click은 기존처럼 단일 선택/drag/vertex 편집을 시작하지만,
+        // Cmd-click은 다중 선택 토글 전용이라 drag 상태를 만들지 않고 바로 반환한다.
+        guard let shapeIndex = shapeIndex(at: location) else { return }
+
+        if selectedShapeIndexes.contains(shapeIndex) {
+            selectedShapeIndexes.remove(shapeIndex)
+            if selectedShapeIndex == shapeIndex {
+                selectedShapeIndex = selectedShapeIndexes.sorted().first
+            }
+        } else {
+            selectedShapeIndexes.insert(shapeIndex)
+            selectedShapeIndex = shapeIndex
+        }
+
+        selectedVertex = nil
+        hoveredShapeIndex = selectedShapeIndex
+        hoveredVertex = nil
+        draggingVertex = nil
+        draggingShapeIndex = nil
+        shapeDragLastImagePoint = nil
+        isPanningImage = false
+        panDragLastLocationInWindow = nil
         notifySelectedShapeChanged()
         needsDisplay = true
     }
@@ -1164,6 +1339,14 @@ private final class AnnotationOverlayView: NSView {
         guard interactionMode == .edit else { return }
 
         let location = convert(event.locationInWindow, from: nil)
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) {
+            // 오늘 수정 상세:
+            // Cmd-click을 먼저 처리해야 polygon 내부 클릭이 shape 이동 drag로 해석되지 않는다.
+            // 따라서 vertex hit-test나 segment insertion보다 앞에서 다중 선택 토글을 끝낸다.
+            toggleShapeSelection(at: location)
+            return
+        }
+
         var selectedVertex = vertexSelection(at: location)
         // 오늘 수정: 꼭지점이 아니라 polygon 선분을 클릭한 경우 새 꼭지점을 삽입하고
         // 방금 삽입한 점을 즉시 draggingVertex로 잡아 이어서 드래그 편집할 수 있게 한다.
@@ -1181,6 +1364,7 @@ private final class AnnotationOverlayView: NSView {
         hoveredShapeIndex = selectedShapeIndex
         // 오늘 수정: 클릭한 shape를 hover와 별도로 저장해서 Delete Polygons 버튼이 사용할 수 있게 한다.
         self.selectedShapeIndex = selectedShapeIndex
+        selectedShapeIndexes = selectedShapeIndex.map { Set([$0]) } ?? []
         // 오늘 수정: preview에서 객체를 클릭했으므로 오른쪽 Polygon Labels table selection도 같은 shape로 맞춘다.
         notifySelectedShapeChanged()
 
@@ -1291,10 +1475,21 @@ private final class AnnotationOverlayView: NSView {
         shapeDragLastImagePoint = nil
         isPanningImage = false
         panDragLastLocationInWindow = nil
+        if hasPushedUndoForCurrentDrag, let annotation {
+            // 오늘 수정 상세:
+            // drag 중에는 mouseDragged가 매우 자주 호출되므로 매 프레임 table reload/dirty callback을 보내지 않는다.
+            // 대신 drag가 실제 편집을 시작해 undo snapshot을 쌓은 경우에만 mouseUp에서 한 번 callback을 보내
+            // 자동저장 dirty 상태와 Polygon Labels 목록을 최신으로 맞춘다.
+            onAnnotationChanged?(annotation)
+        }
         hasPushedUndoForCurrentDrag = false
 
         let location = convert(event.locationInWindow, from: nil)
         updateCursor(at: location)
+    }
+
+    override func magnify(with event: NSEvent) {
+        onMagnify?(event)
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -1309,6 +1504,7 @@ private final class AnnotationOverlayView: NSView {
             // 이미 선택된 꼭지점이 있다면 꼭지점 위가 아닌 곳에서 우클릭해도 아래 guard를 통해 기존 선택 메뉴를 띄울 수 있다.
             selectedVertex = clickedVertex
             selectedShapeIndex = clickedVertex.shapeIndex
+            selectedShapeIndexes = [clickedVertex.shapeIndex]
             hoveredVertex = clickedVertex
             hoveredShapeIndex = clickedVertex.shapeIndex
             notifySelectedShapeChanged()
@@ -1390,6 +1586,69 @@ private final class AnnotationOverlayView: NSView {
         undoLastAnnotationEdit()
     }
 
+    @objc func copy(_ sender: Any?) {
+        copySelectedShapes()
+    }
+
+    @objc func paste(_ sender: Any?) {
+        pasteCopiedShapes()
+    }
+
+    @discardableResult
+    private func copySelectedShapes() -> Bool {
+        // 오늘 수정 상세:
+        // 복사는 현재 선택 Set의 shape들을 index 오름차순으로 보관한다.
+        // 순서를 안정적으로 유지해야 여러 객체를 붙여넣었을 때 Polygon Labels row 순서와 선택 상태가 예측 가능하다.
+        guard interactionMode == .edit,
+              let annotation else {
+            return false
+        }
+
+        let shapes = selectedShapeIndexes
+            .sorted()
+            .compactMap { index -> LabelMeAnnotation.Shape? in
+                guard annotation.shapes.indices.contains(index) else { return nil }
+                return annotation.shapes[index]
+            }
+        guard !shapes.isEmpty else { return false }
+
+        Self.copiedShapes = shapes
+        return true
+    }
+
+    @discardableResult
+    private func pasteCopiedShapes() -> Bool {
+        // 오늘 수정 상세:
+        // 붙여넣기는 현재 이미지의 annotation.shapes 끝에 복사된 Shape들을 그대로 append한다.
+        // 좌표 변환은 하지 않으므로 같은 해상도/비슷한 구도의 다른 이미지에서 label 정보를 재사용하는 용도다.
+        // 붙여넣은 shape index들을 즉시 선택 Set으로 만들어 사용자가 바로 이동/삭제/재복사할 수 있게 한다.
+        guard interactionMode == .edit,
+              !Self.copiedShapes.isEmpty,
+              var annotation else {
+            return false
+        }
+
+        pushUndoSnapshot()
+        let firstPastedIndex = annotation.shapes.count
+        annotation.shapes.append(contentsOf: Self.copiedShapes)
+        let pastedIndexes = Set(firstPastedIndex..<annotation.shapes.count)
+
+        self.annotation = annotation
+        selectedShapeIndexes = pastedIndexes
+        selectedShapeIndex = pastedIndexes.sorted().first
+        selectedVertex = nil
+        hoveredShapeIndex = selectedShapeIndex
+        hoveredVertex = nil
+        draggingVertex = nil
+        draggingShapeIndex = nil
+        shapeDragLastImagePoint = nil
+        visibleShapeIndexes.formUnion(pastedIndexes)
+        onAnnotationChanged?(annotation)
+        notifySelectedShapeChanged()
+        needsDisplay = true
+        return true
+    }
+
     @discardableResult
     func deleteSelectedShape() -> Bool {
         // 오늘 수정: edit 모드에서 선택된 shape만 삭제하고, 선택이 없으면 아무 작업도 하지 않는다.
@@ -1406,6 +1665,7 @@ private final class AnnotationOverlayView: NSView {
 
         // 오늘 수정: 삭제된 shape와 관련된 hover/drag/selection 상태를 모두 비운다.
         self.selectedShapeIndex = nil
+        selectedShapeIndexes = []
         selectedVertex = nil
         hoveredShapeIndex = nil
         hoveredVertex = nil
@@ -1512,6 +1772,7 @@ private final class AnnotationOverlayView: NSView {
         annotation.shapes[selectedVertex.shapeIndex].points.remove(at: selectedVertex.vertexIndex)
         self.annotation = annotation
         selectedShapeIndex = selectedVertex.shapeIndex
+        selectedShapeIndexes = [selectedVertex.shapeIndex]
         self.selectedVertex = nil
         hoveredVertex = nil
         draggingVertex = nil
@@ -1533,6 +1794,7 @@ private final class AnnotationOverlayView: NSView {
         annotation = snapshot.annotation
         visibleShapeIndexes = snapshot.visibleShapeIndexes
         selectedShapeIndex = snapshot.selectedShapeIndex
+        selectedShapeIndexes = snapshot.selectedShapeIndexes
         selectedVertex = isValidVertexSelection(snapshot.selectedVertex, in: snapshot.annotation)
             ? snapshot.selectedVertex
             : nil
@@ -1559,6 +1821,12 @@ private final class AnnotationOverlayView: NSView {
 
         if interactionMode == .edit, key == "z", !modifierFlags.contains(.shift) {
             return undoLastAnnotationEdit()
+        }
+        if interactionMode == .edit, key == "c" {
+            return copySelectedShapes()
+        }
+        if interactionMode == .edit, key == "v" {
+            return pasteCopiedShapes()
         }
 
         guard interactionMode == .create else {
@@ -1607,6 +1875,7 @@ private final class AnnotationOverlayView: NSView {
             let isActiveShape = isEditingEnabled &&
                 (
                     // 오늘 수정: toolbar 삭제 대상인 선택 shape도 hover shape처럼 강조해서 표시한다.
+                    selectedShapeIndexes.contains(shapeIndex) ||
                     shapeIndex == selectedShapeIndex ||
                     shapeIndex == hoveredShapeIndex ||
                     shapeIndex == draggingVertex?.shapeIndex ||
@@ -2081,6 +2350,7 @@ private final class AnnotationOverlayView: NSView {
                 annotation: annotation,
                 visibleShapeIndexes: visibleShapeIndexes,
                 selectedShapeIndex: selectedShapeIndex,
+                selectedShapeIndexes: selectedShapeIndexes,
                 selectedVertex: selectedVertex
             )
         )
@@ -2100,8 +2370,8 @@ private final class AnnotationOverlayView: NSView {
 
     private func notifySelectedShapeChanged() {
         // 오늘 수정: preview overlay의 선택 상태가 바뀌면 ImageControlViewController가 Polygon Labels row를 맞춘다.
-        // 선택 해제도 nil로 전달해 table selection을 지우게 한다.
-        onSelectedShapeChanged?(selectedShapeIndex)
+        // 선택 해제도 빈 Set으로 전달해 table selection을 지우게 한다.
+        onSelectedShapeChanged?(selectedShapeIndexes)
     }
 
     private func isValidVertexSelection(
@@ -2306,7 +2576,9 @@ private final class AnnotationOverlayView: NSView {
 
         self.annotation = annotation
         selectedShapeIndex = segmentSelection.shapeIndex
+        selectedShapeIndexes = [segmentSelection.shapeIndex]
         hoveredShapeIndex = segmentSelection.shapeIndex
+        onAnnotationChanged?(annotation)
         // 오늘 수정: 삽입한 점을 곧바로 선택된 vertex로 돌려주면 mouseDragged에서 그 점 위치를 계속 갱신할 수 있다.
         let selection = VertexSelection(shapeIndex: segmentSelection.shapeIndex, vertexIndex: insertIndex)
         hoveredVertex = selection

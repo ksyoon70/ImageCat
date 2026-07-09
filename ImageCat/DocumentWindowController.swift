@@ -7,7 +7,11 @@
 
 import Cocoa
 
-class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
+// 오늘 수정 상세:
+// DocumentWindowController는 toolbar뿐 아니라 File 메뉴 항목도 런타임에 보강한다.
+// storyboard의 File > Save Automatically는 AppKit document 메뉴 보정 때문에 상태가 흔들릴 수 있으므로,
+// NSMenuItemValidation까지 직접 맡아 체크 표시와 enabled 상태를 현재 window 상태와 맞춘다.
+class DocumentWindowController: NSWindowController, NSToolbarItemValidation, NSMenuItemValidation {
     private enum ToolbarLabel {
         static let deleteFile = "Delete File"
         // 오늘 수정: Storyboard의 Next Image toolbar item에는 action 연결이 없으므로
@@ -19,6 +23,11 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
         static let deletePolygons = "Delete Polygons"
     }
 
+    private enum MenuLabel {
+        static let save = "Save"
+        static let saveAutomatically = "Save Automatically"
+    }
+
     private enum ToolbarDefaults {
         // 오늘 수정: 사용자가 toolbar 표시 방식을 Icon Only / Icon and Text 등으로 바꾸면
         // 다음 실행에서도 유지되도록 NSToolbar.DisplayMode를 UserDefaults에 저장한다.
@@ -28,6 +37,11 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
     // 오늘 수정: toolbar displayMode는 사용자가 customize menu에서 바꿀 수 있으므로
     // KVO로 변경을 감지해 즉시 UserDefaults에 저장한다.
     private var toolbarDisplayModeObservation: NSKeyValueObservation?
+    // 오늘 수정 상세:
+    // Save Automatically는 사용자가 "이번 실행/이번 창에서만" 켜는 작업 모드다.
+    // UserDefaults에 저장하지 않아 앱을 새로 시작하면 항상 false(off)에서 출발한다.
+    // 자동저장이 꺼진 상태에서 변경된 annotation을 두고 다른 파일로 이동하면 저장 확인 alert를 띄운다.
+    private var isSaveAutomaticallyEnabled = false
 
     override func windowDidLoad() {
         super.windowDidLoad()
@@ -36,6 +50,7 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
         window?.toolbarStyle = .expanded
         // 오늘 수정: Storyboard 기본값 대신 마지막 사용자의 toolbar 표시 방식을 먼저 복원한다.
         configureToolbarDisplayModePersistence()
+        configureFileMenuItems()
         // 오늘 수정: preview overlay가 focus를 가진 상태에서 a/d 키를 눌러도
         // 실제 이미지 선택은 파일 리스트 컨트롤러가 수행하도록 callback을 연결한다.
         configureImageNavigationCallbacks()
@@ -63,7 +78,18 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
     }
 
     @IBAction func deleteFile(_ sender: Any?) {
-        // 현재는 항상 활성화만 보장한다. 실제 삭제 동작은 별도 구현 시 여기에 연결한다.
+        // 오늘 수정 상세:
+        // toolbar의 Delete File은 이미지 파일을 삭제하지 않는다.
+        // 현재 선택된 이미지와 같은 basename의 LabelMe JSON 파일만 삭제하며,
+        // 실수로 라벨 파일을 지우지 않도록 먼저 확인 alert를 띄운다.
+        guard confirmDeletingCurrentAnnotationFile() else { return }
+
+        do {
+            try imagePreviewViewController?.deleteCurrentAnnotationFile()
+            updatePolygonToolbarItems()
+        } catch {
+            showSaveError(error)
+        }
     }
 
     @IBAction func nextImage(_ sender: Any?) {
@@ -127,6 +153,22 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
         }
     }
 
+    @IBAction func saveDocument(_ sender: Any?) {
+        // 오늘 수정 상세:
+        // File > Save 메뉴가 NSDocument의 기본 saveDocument:로 빠지면
+        // 이 앱의 LabelMe JSON 저장 흐름을 타지 않는다.
+        // 메뉴 Save와 toolbar Save가 같은 annotation 저장 코드를 쓰도록 여기서 saveAnnotation으로 모은다.
+        saveAnnotation(sender)
+    }
+
+    @IBAction func toggleSaveAutomatically(_ sender: Any?) {
+        // 오늘 수정 상세:
+        // 이 토글은 즉시 메뉴 체크 표시만 바꾼다.
+        // 상태를 저장하지 않기 때문에 앱을 다시 켜면 기본 off 상태가 된다.
+        isSaveAutomaticallyEnabled.toggle()
+        updateFileMenuItems()
+    }
+
     private var fileListViewController: ViewController? {
         return (contentViewController as? NSSplitViewController)?
             .splitViewItems
@@ -141,8 +183,76 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
             .first
     }
 
+    func saveCurrentAnnotationBeforeNavigationIfNeeded() -> Bool {
+        // 오늘 수정 상세:
+        // 모든 이미지 전환 경로(File List 직접 선택, a/d, toolbar Next/Prev, 폴더 이동)는
+        // ViewController에서 최종적으로 이 함수를 호출한다.
+        // 반환값이 false이면 사용자가 Cancel했거나 저장 실패가 난 것이므로 이동을 중단해야 한다.
+        guard imagePreviewViewController?.hasUnsavedAnnotationEdits == true else {
+            return true
+        }
+
+        if !isSaveAutomaticallyEnabled {
+            // 자동저장이 꺼져 있으면 macOS 문서 앱처럼 Save / Cancel / Don't Save 선택지를 보여준다.
+            return confirmSavingCurrentAnnotationBeforeNavigation()
+        }
+
+        do {
+            try imagePreviewViewController?.saveCurrentAnnotation()
+            return true
+        } catch {
+            showSaveError(error)
+            return false
+        }
+    }
+
+    private func confirmSavingCurrentAnnotationBeforeNavigation() -> Bool {
+        // 오늘 수정 상세:
+        // alert 버튼 순서는 사용자가 요청한 예시와 맞춘다.
+        // 1번째: 저장하지 않고 이동, 2번째: 이동 취소, 3번째: 저장 후 이동.
+        // NSAlert의 반환값도 이 순서에 맞춰 alertFirst/Second/ThirdButtonReturn으로 분기한다.
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        let imagePath = imagePreviewViewController?.imageURL?.path ?? "the current image"
+        alert.messageText = "Save annotations to \"\(imagePath)\" before closing?"
+        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Save")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return true
+        case .alertSecondButtonReturn:
+            return false
+        case .alertThirdButtonReturn:
+            do {
+                try imagePreviewViewController?.saveCurrentAnnotation()
+                return true
+            } catch {
+                showSaveError(error)
+                return false
+            }
+        default:
+            return false
+        }
+    }
+
+    private func confirmDeletingCurrentAnnotationFile() -> Bool {
+        // 오늘 수정 상세:
+        // 삭제 대상은 annotation JSON이므로 warning alert로 확인한다.
+        // No를 기본 첫 버튼으로 둬 실수 삭제를 줄이고, Yes는 두 번째 버튼일 때만 true로 처리한다.
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "You are about to permanently delete this label file, proceed anyway?"
+        alert.addButton(withTitle: "No")
+        alert.addButton(withTitle: "Yes")
+
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
     private func updatePolygonToolbarItems() {
         let mode = imagePreviewViewController?.polygonInteractionMode ?? .inactive
+        updateFileMenuItems()
 
         // Create/Edit 버튼은 현재 활성 모드 버튼만 잠그고, 반대 버튼은 모드 전환용으로 열어둔다.
         window?.toolbar?.items.forEach { toolbarItem in
@@ -198,6 +308,47 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
         toolbarDisplayModeObservation = toolbar.observe(\.displayMode, options: [.new]) { [weak self] toolbar, _ in
             self?.saveToolbarDisplayMode(toolbar.displayMode)
         }
+    }
+
+    private func configureFileMenuItems() {
+        // 오늘 수정 상세:
+        // AppKit의 document-based app 메뉴 보정이 실행 후 File 메뉴를 바꿀 수 있다.
+        // 그래서 storyboard 연결만 믿지 않고 windowDidLoad에서 실제 메뉴 item을 title로 찾아
+        // Save와 Save Automatically의 target/action을 이 window controller로 다시 연결한다.
+        fileMenuItem(withTitle: MenuLabel.save)?.target = self
+        fileMenuItem(withTitle: MenuLabel.save)?.action = #selector(saveAnnotation(_:))
+        fileMenuItem(withTitle: MenuLabel.saveAutomatically)?.target = self
+        fileMenuItem(withTitle: MenuLabel.saveAutomatically)?.action = #selector(toggleSaveAutomatically(_:))
+        updateFileMenuItems()
+    }
+
+    private func updateFileMenuItems() {
+        // 오늘 수정 상세:
+        // Save Automatically는 checkable menu item이다.
+        // 상태는 UserDefaults가 아니라 isSaveAutomaticallyEnabled 런타임 변수만 반영한다.
+        fileMenuItem(withTitle: MenuLabel.saveAutomatically)?.state = isSaveAutomaticallyEnabled ? .on : .off
+    }
+
+    private func fileMenuItem(withTitle title: String) -> NSMenuItem? {
+        guard let fileMenu = NSApp.mainMenu?.items.first(where: { $0.title == "File" })?.submenu else {
+            return nil
+        }
+
+        return menuItem(withTitle: title, in: fileMenu)
+    }
+
+    private func menuItem(withTitle title: String, in menu: NSMenu) -> NSMenuItem? {
+        for item in menu.items {
+            if item.title == title {
+                return item
+            }
+            if let submenu = item.submenu,
+               let foundItem = menuItem(withTitle: title, in: submenu) {
+                return foundItem
+            }
+        }
+
+        return nil
     }
 
     private func configureImageNavigationCallbacks() {
@@ -285,6 +436,18 @@ class DocumentWindowController: NSWindowController, NSToolbarItemValidation {
             return true
         default:
             return isDeleteFileToolbarItem(item) || item.isEnabled
+        }
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(saveAnnotation(_:)), #selector(saveDocument(_:)):
+            return imagePreviewViewController != nil
+        case #selector(toggleSaveAutomatically(_:)):
+            menuItem.state = isSaveAutomaticallyEnabled ? .on : .off
+            return true
+        default:
+            return true
         }
     }
 

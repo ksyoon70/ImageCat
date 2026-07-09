@@ -62,6 +62,16 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     private let folderLabelScanQueue = DispatchQueue(label: "ImageCat.folderLabelScanQueue", qos: .userInitiated)
     // 폴더를 빠르게 바꿀 때 오래된 scan 결과가 최신 화면에 덮어쓰이지 않게 세대값을 쓴다.
     private var folderLabelScanGeneration = 0
+    // 오늘 수정 상세:
+    // File List에서 다른 이미지를 클릭하는 순간 NSTableView selection은 먼저 바뀌고,
+    // 그 다음 tableViewSelectionDidChange가 호출된다. 이때 저장 확인 alert에서 Cancel을 누르면
+    // 이미 바뀐 table selection을 이전 row로 되돌려야 preview와 목록이 엇갈리지 않는다.
+    // currentSelectedRow는 "실제로 preview가 보고 있는 row"를 기억하고,
+    // isRestoringSelection은 코드로 selection을 되돌릴 때 delegate가 다시 도는 순환을 막는다.
+    // didCancelSelectionChange는 더블클릭 중 selection change가 먼저 취소된 뒤 doubleAction이 이어서 실행되는 것을 막는다.
+    private var currentSelectedRow: Int?
+    private var isRestoringSelection = false
+    private var didCancelSelectionChange = false
 
     // 오늘 수정: DocumentWindowController가 Next/Prev toolbar item을 validation할 때 사용하는 상태다.
     // 폴더가 선택되어 있고 File List에 이미지가 하나 이상 있으면 이미지 이동 버튼을 활성화한다.
@@ -128,15 +138,36 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        // 오늘 수정 상세:
+        // restorePreviousSelection()이 table selection을 코드로 되돌릴 때도 이 delegate가 호출된다.
+        // 그 경우에는 저장 확인 alert를 다시 띄우면 무한 루프처럼 보이므로 조용히 무시한다.
+        guard !isRestoringSelection else { return }
+
         guard tableView.selectedRow >= 0, tableView.selectedRow < items.count else {
             imagePreviewViewController?.imageURL = nil
+            currentSelectedRow = nil
             // 오늘 수정: 선택이 사라지면 preview 상태와 toolbar enable 상태도 같이 갱신한다.
             validateDocumentToolbar()
             return
         }
 
-        let item = items[tableView.selectedRow]
-        imagePreviewViewController?.imageURL = item.isImage ? item.url : nil
+        let selectedRow = tableView.selectedRow
+        let item = items[selectedRow]
+        let targetImageURL = item.isImage ? item.url : nil
+        if imagePreviewViewController?.imageURL != targetImageURL,
+           let documentWindowController = view.window?.windowController as? DocumentWindowController,
+           !documentWindowController.saveCurrentAnnotationBeforeNavigationIfNeeded() {
+            // 오늘 수정 상세:
+            // 사용자가 저장 확인 alert에서 Cancel을 누른 경우다.
+            // 이미 NSTableView의 선택은 새 row로 바뀐 상태이므로 이전 row로 복원하고,
+            // double-click으로 들어온 이벤트라면 이어지는 doubleAction도 무시하게 표시한다.
+            didCancelSelectionChange = true
+            restorePreviousSelection()
+            return
+        }
+
+        imagePreviewViewController?.imageURL = targetImageURL
+        currentSelectedRow = selectedRow
         // 오늘 수정: 파일 선택이 이미지/폴더 사이에서 바뀔 때 Next/Prev 등 toolbar 상태를 즉시 재검증한다.
         validateDocumentToolbar()
     }
@@ -328,19 +359,42 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     }
 
     @objc private func doubleClickTableRow(_ sender: Any?) {
+        // 오늘 수정 상세:
+        // NSTableView doubleAction은 selection change 뒤에 들어올 수 있다.
+        // selection change 단계에서 저장 확인이 취소되었으면, 여기서 폴더 이동이나 이미지 열기를 다시 수행하면 안 된다.
+        guard !didCancelSelectionChange else {
+            didCancelSelectionChange = false
+            return
+        }
+
         let clickedRow = tableView.clickedRow
         guard clickedRow >= 0, clickedRow < items.count else { return }
 
         let item = items[clickedRow]
         if item.isDirectory {
+            // 오늘 수정 상세:
+            // 폴더 이동도 현재 이미지에서 벗어나는 동작이다.
+            // 자동저장이 켜져 있으면 저장 후 이동하고, 꺼져 있으면 저장 확인 alert 결과에 따라 이동 여부를 결정한다.
+            if let documentWindowController = view.window?.windowController as? DocumentWindowController,
+               !documentWindowController.saveCurrentAnnotationBeforeNavigationIfNeeded() {
+                restorePreviousSelection()
+                return
+            }
             navigate(to: item.url)
         } else if item.isImage {
-            imagePreviewViewController?.imageURL = item.url
+            tableView.selectRowIndexes(IndexSet(integer: clickedRow), byExtendingSelection: false)
         }
     }
 
     @objc private func goToParentFolder(_ sender: Any?) {
         guard let currentFolderURL = currentFolderURL else { return }
+        // 오늘 수정 상세:
+        // 상위 폴더 이동도 현재 이미지 선택을 해제할 수 있으므로,
+        // 직접 이미지 row를 클릭하는 것과 같은 저장/취소 정책을 적용한다.
+        if let documentWindowController = view.window?.windowController as? DocumentWindowController,
+           !documentWindowController.saveCurrentAnnotationBeforeNavigationIfNeeded() {
+            return
+        }
 
         let parentURL = currentFolderURL.deletingLastPathComponent()
         guard parentURL.path != currentFolderURL.path else { return }
@@ -364,6 +418,27 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     @objc func selectPreviousImage(_ sender: Any?) {
         // 오늘 수정: toolbar Prev Image와 a 키가 공유하는 공개 entry point다.
         selectImage(direction: -1)
+    }
+
+    private func restorePreviousSelection() {
+        // 오늘 수정 상세:
+        // 저장 확인에서 Cancel했을 때 preview는 아직 이전 이미지를 보고 있으므로
+        // File List의 selection도 이전 row로 되돌린다.
+        // 이 함수 안에서 발생하는 selectionDidChange는 isRestoringSelection으로 막는다.
+        isRestoringSelection = true
+        defer {
+            isRestoringSelection = false
+            validateDocumentToolbar()
+        }
+
+        if let currentSelectedRow,
+           currentSelectedRow >= 0,
+           currentSelectedRow < items.count {
+            tableView.selectRowIndexes(IndexSet(integer: currentSelectedRow), byExtendingSelection: false)
+            tableView.scrollRowToVisible(currentSelectedRow)
+        } else {
+            tableView.deselectAll(nil)
+        }
     }
 
     private func selectImage(direction: Int) {
