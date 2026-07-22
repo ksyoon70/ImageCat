@@ -22,6 +22,8 @@
 		61639A4D2F75DF8600167974 /* Document.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 61639A4B2F75DF8600167974 /* Document.xcdatamodeld */; };
 		61639A4F2F75DF8800167974 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 61639A4E2F75DF8800167974 /* Assets.xcassets */; };
 		61639A522F75DF8800167974 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 61639A502F75DF8800167974 /* Main.storyboard */; };
+		616B4C8D300F67C500AD1DBE /* AnnotationLabelPromptWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616B4C8B300F67C500AD1DBE /* AnnotationLabelPromptWindowController.swift */; };
+		616B4C90300F682300AD1DBE /* AnnotationLabelPromptViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616B4C8F300F682300AD1DBE /* AnnotationLabelPromptViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,6 +45,8 @@
 		61639A512F75DF8800167974 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		61639A532F75DF8800167974 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		61639A542F75DF8800167974 /* ImageCat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ImageCat.entitlements; sourceTree = "<group>"; };
+		616B4C8B300F67C500AD1DBE /* AnnotationLabelPromptWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationLabelPromptWindowController.swift; sourceTree = "<group>"; };
+		616B4C8F300F682300AD1DBE /* AnnotationLabelPromptViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationLabelPromptViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -75,6 +79,7 @@
 		61639A442F75DF8600167974 /* ImageCat */ = {
 			isa = PBXGroup;
 			children = (
+				616B4C8B300F67C500AD1DBE /* AnnotationLabelPromptWindowController.swift */,
 				61056C7D2FE1929100023A2B /* ImageCurveControl.swift */,
 				61056C7B2FE18EBA00023A2B /* ImageControlViewController.swift */,
 				61639A452F75DF8600167974 /* AppDelegate.swift */,
@@ -92,6 +97,7 @@
 				613CFC452FF3A0D10070F046 /* ColorDotView.swift */,
 				613CFC472FF3B1670070F046 /* DocumentWindowController.swift */,
 				613CFC492FF4A8E90070F046 /* MainSplitViewController.swift */,
+				616B4C8F300F682300AD1DBE /* AnnotationLabelPromptViewController.swift */,
 			);
 			path = ImageCat;
 			sourceTree = "<group>";
@@ -169,12 +175,14 @@
 				613CFC442FF39E6A0070F046 /* AnnotationModels.swift in Sources */,
 				612260AF2F8E255F002BD7DD /* SidebarViewController.swift in Sources */,
 				61639A4D2F75DF8600167974 /* Document.xcdatamodeld in Sources */,
+				616B4C8D300F67C500AD1DBE /* AnnotationLabelPromptWindowController.swift in Sources */,
 				613CFC462FF3A0D10070F046 /* ColorDotView.swift in Sources */,
 				61639A482F75DF8600167974 /* ViewController.swift in Sources */,
 				612260B12F8E2811002BD7DD /* SidebarItem.swift in Sources */,
 				61056C7C2FE18EBA00023A2B /* ImageControlViewController.swift in Sources */,
 				612260B32F8E3000002BD7DD /* ImagePreviewViewController.swift in Sources */,
 				613CFC4A2FF4A8E90070F046 /* MainSplitViewController.swift in Sources */,
+				616B4C90300F682300AD1DBE /* AnnotationLabelPromptViewController.swift in Sources */,
 				613CFC482FF3B1670070F046 /* DocumentWindowController.swift in Sources */,
 				61056C7E2FE1929100023A2B /* ImageCurveControl.swift in Sources */,
 				61639A462F75DF8600167974 /* AppDelegate.swift in Sources */,

@@ -156,7 +156,7 @@ class ImagePreviewViewController: NSViewController {
         annotationOverlayView.onSelectedShapeChanged = { [weak self] shapeIndexes in
             self?.imageControlViewController?.selectPolygonLabelRows(forShapeIndexes: shapeIndexes)
         }
-        // 오버레이는 화면 입력만 담당하고, label 입력 창은 뷰 컨트롤러가 띄운다.
+        // 오버레이는 화면 입력만 담당하고, label 입력은 Storyboard 다이얼로그에 위임한다.
         annotationOverlayView.onLabelRequested = { [weak self] labels in
             self?.requestAnnotationLabel(existingLabels: labels)
         }
@@ -655,9 +655,21 @@ class ImagePreviewViewController: NSViewController {
     }
 
     private func requestAnnotationLabel(existingLabels: [String]) -> String? {
-        // 도형이 닫히거나 rectangle 드래그가 끝난 뒤 label을 확정받는다.
-        let prompt = AnnotationLabelPrompt(existingLabels: existingLabels)
-        return prompt.runModal(attachedTo: view.window)
+        // 오늘 수정: 코드로 조립하던 NSAlert 대신 Storyboard 다이얼로그를 사용한다.
+        // 매번 새로 생성해야 이전 입력 상태와 table selection이 남지 않는다.
+        let storyboard = NSStoryboard(name: NSStoryboard.Name("Main"), bundle: .main)
+        guard let prompt = storyboard.instantiateController(
+            withIdentifier: NSStoryboard.SceneIdentifier("AnnotationLabelPromptWindowController")
+        ) as? AnnotationLabelPromptWindowController else {
+            return nil
+        }
+
+        // 생성 동작이 끝난 직후의 마우스 화면 좌표 근처에 다이얼로그를 표시한다.
+        return prompt.runModal(
+            near: NSEvent.mouseLocation,
+            parent: view.window,
+            existingLabels: existingLabels
+        )
     }
 
     private static func saveAnnotation(_ annotation: LabelMeAnnotation, for imageURL: URL) throws {
@@ -714,136 +726,6 @@ private enum AnnotationSaveError: LocalizedError {
         case .missingAnnotation:
             return "저장할 라벨링 JSON이 없습니다."
         }
-    }
-}
-
-// create 모드에서 새 도형을 확정할 때 label을 입력하거나 기존 label을 고르게 하는 창이다.
-private final class AnnotationLabelPrompt: NSObject, NSTableViewDataSource, NSTableViewDelegate {
-    private enum Layout {
-        static let width: CGFloat = 520
-        static let height: CGFloat = 300
-        static let fieldHeight: CGFloat = 32
-        static let spacing: CGFloat = 12
-        static let groupFieldWidth: CGFloat = 110
-    }
-
-    private let labels: [String]
-    private let defaultLabel: String?
-    private let labelField = NSTextField()
-    private let groupField = NSTextField()
-    private let tableView = NSTableView()
-
-    init(existingLabels: [String]) {
-        defaultLabel = existingLabels.last
-        // 같은 label이 여러 shape에 쓰여도 목록에는 한 번만 보여준다.
-        var seenLabels = Set<String>()
-        labels = existingLabels.filter { label in
-            seenLabels.insert(label).inserted
-        }
-        super.init()
-    }
-
-    func runModal(attachedTo window: NSWindow?) -> String? {
-        let alert = NSAlert()
-        alert.messageText = "Label"
-        alert.informativeText = ""
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Cancel")
-        alert.accessoryView = makeAccessoryView()
-        alert.window.initialFirstResponder = labelField
-
-        // 새 라벨을 빠르게 추가할 수 있도록 가장 최근에 사용된 label을 기본값으로 둔다.
-        if let defaultLabel = defaultLabel,
-           let defaultRow = labels.firstIndex(of: defaultLabel) {
-            labelField.stringValue = defaultLabel
-            tableView.selectRowIndexes(IndexSet(integer: defaultRow), byExtendingSelection: false)
-        } else if let lastLabel = labels.last {
-            labelField.stringValue = lastLabel
-            tableView.selectRowIndexes(IndexSet(integer: labels.count - 1), byExtendingSelection: false)
-        }
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return nil }
-
-        let label = labelField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return label.isEmpty ? nil : label
-    }
-
-    func numberOfRows(in tableView: NSTableView) -> Int {
-        return labels.count
-    }
-
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        guard row < labels.count else { return nil }
-
-        let identifier = NSUserInterfaceItemIdentifier("AnnotationLabelPromptCell")
-        let field = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTextField
-            ?? NSTextField(labelWithString: "")
-        field.identifier = identifier
-        field.font = .systemFont(ofSize: 18)
-        field.lineBreakMode = .byTruncatingTail
-        field.stringValue = labels[row]
-        return field
-    }
-
-    func tableViewSelectionDidChange(_ notification: Notification) {
-        let row = tableView.selectedRow
-        guard row >= 0, row < labels.count else { return }
-        // 목록의 label을 선택하면 입력칸에 복사해서 바로 OK할 수 있게 한다.
-        labelField.stringValue = labels[row]
-        labelField.selectText(nil)
-    }
-
-    private func makeAccessoryView() -> NSView {
-        let accessoryView = NSView(
-            frame: NSRect(x: 0, y: 0, width: Layout.width, height: Layout.height)
-        )
-
-        labelField.font = .systemFont(ofSize: 22)
-        labelField.placeholderString = "Label"
-        labelField.frame = NSRect(
-            x: 0,
-            y: Layout.height - Layout.fieldHeight,
-            width: Layout.width - Layout.groupFieldWidth - Layout.spacing,
-            height: Layout.fieldHeight
-        )
-
-        groupField.font = .systemFont(ofSize: 22)
-        groupField.placeholderString = "Group ID"
-        groupField.isEnabled = false
-        groupField.frame = NSRect(
-            x: labelField.frame.maxX + Layout.spacing,
-            y: labelField.frame.minY,
-            width: Layout.groupFieldWidth,
-            height: Layout.fieldHeight
-        )
-
-        let scrollView = NSScrollView(
-            frame: NSRect(
-                x: 0,
-                y: 0,
-                width: Layout.width,
-                height: labelField.frame.minY - Layout.spacing
-            )
-        )
-        scrollView.hasVerticalScroller = true
-        scrollView.borderType = .bezelBorder
-
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("AnnotationLabelPromptColumn"))
-        column.width = Layout.width
-        tableView.addTableColumn(column)
-        tableView.headerView = nil
-        tableView.rowHeight = 28
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.frame = scrollView.bounds
-
-        scrollView.documentView = tableView
-
-        accessoryView.addSubview(labelField)
-        accessoryView.addSubview(groupField)
-        accessoryView.addSubview(scrollView)
-        return accessoryView
     }
 }
 
