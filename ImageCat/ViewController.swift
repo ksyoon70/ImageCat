@@ -45,6 +45,11 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
         }
     }
 
+    // NSSearchField가 입력 중에도 action을 보내므로 검색어가 바뀔 때마다 현재 폴더 목록을 즉시 필터링한다.
+    @objc private func searchFieldChanged(_ sender: NSSearchField) {
+        applySearchFilter()
+    }
+
     private let toolbarView = NSView()
     private let upButton = NSButton()
     private let pathLabel = NSTextField(labelWithString: "")
@@ -52,7 +57,11 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     private let scrollView = NSScrollView()
     private let emptyLabel = NSTextField(labelWithString: "폴더를 선택하세요.")
     private var currentFolderURL: URL?
+    // 디스크에서 읽은 현재 폴더의 전체 항목을 보관하고, 검색어 변경 시 다시 디스크를 읽지 않도록 한다.
+    private var allItems: [FileListItem] = []
+    // NSTableView와 Next/Prev 이동은 검색 조건이 적용된 화면 표시 목록만 사용한다.
     private var items: [FileListItem] = []
+    private let searchField = NSSearchField()
     private let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
@@ -65,16 +74,16 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     // 오늘 수정 상세:
     // File List에서 다른 이미지를 클릭하는 순간 NSTableView selection은 먼저 바뀌고,
     // 그 다음 tableViewSelectionDidChange가 호출된다. 이때 저장 확인 alert에서 Cancel을 누르면
-    // 이미 바뀐 table selection을 이전 row로 되돌려야 preview와 목록이 엇갈리지 않는다.
-    // currentSelectedRow는 "실제로 preview가 보고 있는 row"를 기억하고,
+    // 이미 바뀐 table selection을 이전 항목으로 되돌려야 preview와 목록이 엇갈리지 않는다.
+    // 검색 결과에 따라 row 번호가 바뀔 수 있으므로 실제 선택은 URL로 기억하고,
     // isRestoringSelection은 코드로 selection을 되돌릴 때 delegate가 다시 도는 순환을 막는다.
     // didCancelSelectionChange는 더블클릭 중 selection change가 먼저 취소된 뒤 doubleAction이 이어서 실행되는 것을 막는다.
-    private var currentSelectedRow: Int?
+    private var currentSelectedItemURL: URL?
     private var isRestoringSelection = false
     private var didCancelSelectionChange = false
 
     // 오늘 수정: DocumentWindowController가 Next/Prev toolbar item을 validation할 때 사용하는 상태다.
-    // 폴더가 선택되어 있고 File List에 이미지가 하나 이상 있으면 이미지 이동 버튼을 활성화한다.
+    // 폴더가 선택되어 있고 현재 검색 결과에 이미지가 하나 이상 있으면 이미지 이동 버튼을 활성화한다.
     var canNavigateImages: Bool {
         return currentFolderURL != nil && items.contains { $0.isImage }
     }
@@ -145,7 +154,7 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
 
         guard tableView.selectedRow >= 0, tableView.selectedRow < items.count else {
             imagePreviewViewController?.imageURL = nil
-            currentSelectedRow = nil
+            currentSelectedItemURL = nil
             // 오늘 수정: 선택이 사라지면 preview 상태와 toolbar enable 상태도 같이 갱신한다.
             validateDocumentToolbar()
             return
@@ -166,8 +175,9 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
             return
         }
 
+        // 저장 확인까지 통과한 선택만 확정한다. Cancel 전에 URL을 바꾸면 이전 선택을 복원할 수 없다.
         imagePreviewViewController?.imageURL = targetImageURL
-        currentSelectedRow = selectedRow
+        currentSelectedItemURL = item.url
         // 오늘 수정: 파일 선택이 이미지/폴더 사이에서 바뀔 때 Next/Prev 등 toolbar 상태를 즉시 재검증한다.
         validateDocumentToolbar()
     }
@@ -217,7 +227,8 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
             toolbarView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             toolbarView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             toolbarView.topAnchor.constraint(equalTo: view.topAnchor),
-            toolbarView.heightAnchor.constraint(equalToConstant: 36),
+            // 경로와 검색 필드를 두 줄로 배치해 좁은 File List에서도 두 컨트롤이 서로 밀리지 않게 한다.
+            toolbarView.heightAnchor.constraint(equalToConstant: 72),
 
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -248,18 +259,53 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
         pathLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         pathLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        // 입력이 끝날 때까지 기다리지 않고 파일명 검색 결과를 실시간으로 갱신한다.
+        searchField.placeholderString = "파일 이름 검색"
+        searchField.sendsSearchStringImmediately = true
+        searchField.sendsWholeSearchString = false
+        searchField.target = self
+        searchField.action = #selector(searchFieldChanged(_:))
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+
         toolbarView.addSubview(upButton)
         toolbarView.addSubview(pathLabel)
+        toolbarView.addSubview(searchField)
 
         NSLayoutConstraint.activate([
-            upButton.leadingAnchor.constraint(equalTo: toolbarView.leadingAnchor, constant: 8),
-            upButton.centerYAnchor.constraint(equalTo: toolbarView.centerYAnchor),
+            upButton.leadingAnchor.constraint(
+                equalTo: toolbarView.leadingAnchor,
+                constant: 8
+            ),
+            upButton.topAnchor.constraint(
+                equalTo: toolbarView.topAnchor,
+                constant: 4
+            ),
             upButton.widthAnchor.constraint(equalToConstant: 28),
             upButton.heightAnchor.constraint(equalToConstant: 28),
 
-            pathLabel.leadingAnchor.constraint(equalTo: upButton.trailingAnchor, constant: 8),
-            pathLabel.trailingAnchor.constraint(equalTo: toolbarView.trailingAnchor, constant: -8),
-            pathLabel.centerYAnchor.constraint(equalTo: toolbarView.centerYAnchor)
+            pathLabel.leadingAnchor.constraint(
+                equalTo: upButton.trailingAnchor,
+                constant: 8
+            ),
+            pathLabel.trailingAnchor.constraint(
+                equalTo: toolbarView.trailingAnchor,
+                constant: -8
+            ),
+            pathLabel.centerYAnchor.constraint(equalTo: upButton.centerYAnchor),
+
+            searchField.leadingAnchor.constraint(
+                equalTo: toolbarView.leadingAnchor,
+                constant: 8
+            ),
+            searchField.trailingAnchor.constraint(
+                equalTo: toolbarView.trailingAnchor,
+                constant: -8
+            ),
+            searchField.topAnchor.constraint(
+                equalTo: upButton.bottomAnchor,
+                constant: 4
+            ),
+            searchField.heightAnchor.constraint(equalToConstant: 28)
         ])
     }
 
@@ -297,6 +343,7 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     private func reloadFiles() {
         guard isViewLoaded else { return }
         guard let folderURL = currentFolderURL else {
+            allItems = []
             items = []
             emptyLabel.stringValue = "폴더를 선택하세요."
             updateCurrentFolderUI()
@@ -314,7 +361,7 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
             )
 
             var seenPaths = Set<String>()
-            items = urls.filter { seenPaths.insert($0.standardizedFileURL.path).inserted }
+            allItems = urls.filter { seenPaths.insert($0.standardizedFileURL.path).inserted }
                 .compactMap(makeFileListItem)
                 .sorted { lhs, rhs in
                     if lhs.isDirectory != rhs.isDirectory {
@@ -322,18 +369,69 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
                     }
                     return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
                 }
-            emptyLabel.stringValue = "표시할 파일이 없습니다."
         } catch {
+            allItems = []
             items = []
             emptyLabel.stringValue = "폴더를 읽을 수 없습니다: \(error.localizedDescription)"
+            tableView.reloadData()
+            tableView.deselectAll(nil)
+            updateCurrentFolderUI()
+            updateContentVisibility()
+            validateDocumentToolbar()
+            return
         }
 
+        // 폴더를 한 번 읽은 뒤 현재 검색어를 적용한다. 검색어는 폴더를 이동해도 유지된다.
+        updateCurrentFolderUI()
+        applySearchFilter()
+    }
+
+    private func applySearchFilter() {
+        let query = searchField.stringValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if query.isEmpty {
+            items = allItems
+        } else {
+            items = allItems.filter { item in
+                item.name.range(
+                    of: query,
+                    options: [
+                        .caseInsensitive,
+                        .diacriticInsensitive
+                    ],
+                    locale: .current
+                ) != nil
+            }
+        }
+
+        // reloadData 뒤 같은 row가 다른 파일을 가리킬 수 있으므로 URL로 선택을 다시 찾는다.
+        // 검색 결과에서 현재 파일이 사라진 경우에는 Preview를 유지한 채 목록 선택만 잠시 숨긴다.
+        isRestoringSelection = true
         tableView.reloadData()
         tableView.deselectAll(nil)
-        updateCurrentFolderUI()
+        if let selectedURL = currentSelectedItemURL,
+           let row = items.firstIndex(where: {
+               $0.url.standardizedFileURL == selectedURL.standardizedFileURL
+           }) {
+            tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            tableView.scrollRowToVisible(row)
+        }
+        isRestoringSelection = false
+
+        updateSearchEmptyState(query: query)
         updateContentVisibility()
-        // 오늘 수정: 폴더 reload 후 이미지가 하나라도 있는지에 따라 Next/Prev Image 상태가 달라진다.
         validateDocumentToolbar()
+    }
+
+    private func updateSearchEmptyState(query: String) {
+        // 폴더 자체가 빈 경우와 검색 결과만 빈 경우를 구분해 사용자가 다음 행동을 판단할 수 있게 한다.
+        if !query.isEmpty && items.isEmpty {
+            emptyLabel.stringValue =
+                "\"\(query)\"와 일치하는 파일이 없습니다."
+        } else {
+            emptyLabel.stringValue = "표시할 파일이 없습니다."
+        }
     }
 
     private func makeFileListItem(url: URL) -> FileListItem? {
@@ -421,24 +519,28 @@ class ViewController: NSViewController, NSTableViewDataSource, NSTableViewDelega
     }
 
     private func restorePreviousSelection() {
-        // 오늘 수정 상세:
-        // 저장 확인에서 Cancel했을 때 preview는 아직 이전 이미지를 보고 있으므로
-        // File List의 selection도 이전 row로 되돌린다.
-        // 이 함수 안에서 발생하는 selectionDidChange는 isRestoringSelection으로 막는다.
+        // 저장 확인에서 Cancel하면 검색으로 row가 달라졌더라도 URL이 같은 이전 항목을 다시 선택한다.
         isRestoringSelection = true
+
         defer {
             isRestoringSelection = false
             validateDocumentToolbar()
         }
 
-        if let currentSelectedRow,
-           currentSelectedRow >= 0,
-           currentSelectedRow < items.count {
-            tableView.selectRowIndexes(IndexSet(integer: currentSelectedRow), byExtendingSelection: false)
-            tableView.scrollRowToVisible(currentSelectedRow)
-        } else {
+        guard let selectedURL = currentSelectedItemURL,
+              let row = items.firstIndex(where: {
+                  $0.url.standardizedFileURL ==
+                  selectedURL.standardizedFileURL
+              }) else {
             tableView.deselectAll(nil)
+            return
         }
+
+        tableView.selectRowIndexes(
+            IndexSet(integer: row),
+            byExtendingSelection: false
+        )
+        tableView.scrollRowToVisible(row)
     }
 
     private func selectImage(direction: Int) {
